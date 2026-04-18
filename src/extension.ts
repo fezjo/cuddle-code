@@ -150,23 +150,63 @@ export function activate(context: vscode.ExtensionContext): void {
 
   context.subscriptions.push(
     vscode.commands.registerCommand("cuddleCode.simulateTrigger", async () => {
-      const triggers = [
-        "idleShort",
-        "burstTyping",
-        "sustainedTyping",
-        "errorFixed",
-        "gitCommit",
-        "testsPassing",
-        "sandyMention"
-      ] as TriggerType[];
-      const pick = await vscode.window.showQuickPick(triggers, { placeHolder: "Select trigger to simulate" });
+      const triggerChoices: Array<{ label: string; trigger: TriggerType; confidence: "high" | "medium" | "strict" }> = [
+        { label: "idleShort", trigger: "idleShort", confidence: "high" },
+        { label: "burstTyping", trigger: "burstTyping", confidence: "high" },
+        { label: "sustainedTyping", trigger: "sustainedTyping", confidence: "high" },
+        { label: "errorFixed", trigger: "errorFixed", confidence: "high" },
+        { label: "gitCommit", trigger: "gitCommit", confidence: "strict" },
+        { label: "testsPassing", trigger: "testsPassing", confidence: "strict" },
+        { label: "sandyMention", trigger: "sandyMention", confidence: "high" }
+      ];
+
+      const pick = await vscode.window.showQuickPick(triggerChoices, {
+        placeHolder: "Select trigger to simulate",
+        matchOnDescription: true
+      });
       if (!pick) {
         return;
       }
-      const persona = choosePersona(pick, getConfig());
-      const line = pick === "sandyMention" ? "Sandy: I am right here with you." : pickLine(pick, persona);
-      output.appendLine(`[CUDDLE][SIMULATE] trigger=${pick} persona=${persona} line=${line}`);
+
+      const bypassChoice = await vscode.window.showQuickPick(
+        [
+          { label: "Respect scheduler", force: false },
+          { label: "Force bypass scheduler", force: true }
+        ],
+        { placeHolder: "Simulation mode" }
+      );
+      if (!bypassChoice) {
+        return;
+      }
+
+      const current = getConfig();
+      const persona = choosePersona(pick.trigger, current);
+      output.appendLine(
+        `[CUDDLE][SIMULATE] requested trigger=${pick.trigger} confidence=${pick.confidence} bypass=${bypassChoice.force} mode=${current.mode} persona=${persona}`
+      );
       output.show(true);
+
+      await respond(
+        {
+          trigger: pick.trigger,
+          confidence: pick.confidence,
+          detail: "simulate-trigger",
+          forceBypassScheduler: bypassChoice.force,
+          metadata:
+            pick.trigger === "sandyMention"
+              ? { sourceText: "// sandy, keep me focused", languageId: "typescript" }
+              : undefined,
+          text: "",
+          persona
+        },
+        output
+      );
+
+      if (current.mode === "mock") {
+        vscode.window.showInformationMessage(
+          `Cuddle Code simulate ran in mock mode. Switch to audio mode for sound playback.`
+        );
+      }
     })
   );
 
@@ -268,9 +308,6 @@ export function activate(context: vscode.ExtensionContext): void {
     }
 
     const decision = scheduler.allow(event.trigger, Date.now(), force || Boolean(event.forceBypassScheduler));
-    if (current.debugLogs) {
-      out.appendLine(`[CUDDLE] Trigger candidate: trigger=${event.trigger} confidence=${event.confidence} detail=${event.detail}`);
-    }
     if (!decision.allowed) {
       out.appendLine(
         `[CUDDLE] Trigger skipped: trigger=${event.trigger} confidence=${event.confidence} reason=${decision.reason} mode=${decision.mode}`
@@ -345,9 +382,12 @@ export function activate(context: vscode.ExtensionContext): void {
       await playMp3Buffer(audio);
       out.appendLine(`[CUDDLE] Played audio line for ${event.trigger}.`);
       vscode.window.setStatusBarMessage(`Cuddle Code played: ${event.trigger}`, 2500);
+      if (force) {
+        vscode.window.showInformationMessage(`Cuddle Code audio played for ${event.trigger}.`);
+      }
     } catch (err) {
       out.appendLine(`[CUDDLE] Audio failed: ${String(err)}`);
-      vscode.window.showErrorMessage("Cuddle Code audio failed. Open 'Cuddle Code' output for details.");
+      vscode.window.showErrorMessage(`Cuddle Code audio failed for ${event.trigger}. Open 'Cuddle Code' output for details.`);
     }
   }
 
@@ -450,6 +490,11 @@ export function activate(context: vscode.ExtensionContext): void {
     const fallbackPersona = personas[0] ?? "female";
     const fallback = pickLine(trigger, fallbackPersona);
     out.appendLine(`[CUDDLE][MOCK][fallback:${fallbackPersona}][${trigger}] ${fallback}`);
+    if (current.mode === "audio") {
+      vscode.window.showWarningMessage(
+        `Cuddle Code audio fallback failed for ${trigger}. No playable cached clip found; using text fallback.`
+      );
+    }
     vscode.window.setStatusBarMessage(`Cuddle Code fallback text: ${trigger}`, 2500);
   }
 
