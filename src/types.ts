@@ -1,9 +1,36 @@
 export type AsmrMode = "mock" | "audio";
 
-export type TriggerType = "longLinePraise" | "idleNudge" | "sustainedTyping" | "burstTyping";
+export type TriggerType =
+  | "idleVeryShort"
+  | "idleShort"
+  | "idleLong"
+  | "idleVeryLong"
+  | "burstTyping"
+  | "sustainedTyping"
+  | "longLine"
+  | "minorRefactor"
+  | "errorAppears"
+  | "errorFixed"
+  | "fileSaved"
+  | "functionFinished"
+  | "gitCommit"
+  | "testsPassing"
+  | "autocompleteAccepted"
+  | "addingComments"
+  | "deletingCode"
+  | "lateNightSession"
+  | "switchingFiles"
+  | "singleLineEdit"
+  | "cursorNavigation"
+  | "formatDocument"
+  | "pasteAction"
+  | "undoRedo"
+  | "sandyMention";
 
 export type Persona = "female" | "male";
 export type VoicePersonaMode = "female" | "male" | "mixed";
+export type PacingMode = "normal" | "demo" | "debug";
+export type TriggerConfidence = "high" | "medium" | "strict";
 
 export interface CoachConfig {
   enabled: boolean;
@@ -24,10 +51,26 @@ export interface CoachConfig {
   usePreGeneratedAudio: boolean;
   preGenerateOnStartup: boolean;
   voicePersona: VoicePersonaMode;
+  pacingMode: PacingMode;
+  llmApiKey: string;
 }
 
 export interface TriggerPayload {
   trigger: TriggerType;
+  confidence: TriggerConfidence;
+  detail: string;
+  forceBypassScheduler?: boolean;
+  metadata?: {
+    languageId?: string;
+    sourceText?: string;
+    commandLine?: string;
+  };
   text: string;
   persona: Persona;
+}
+
+export interface TriggerDecision {
+  allowed: boolean;
+  reason?: string;
+  mode: PacingMode;
 }

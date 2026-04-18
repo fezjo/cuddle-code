@@ -144,7 +144,7 @@ export class AudioCache {
         if (existing.blockedReason) {
           blocked += 1;
         }
-        this.output.appendLine(`[ASMR] Preload failed for ${line.trigger}/${line.persona}: ${String(err)}`);
+        this.output.appendLine(`[CUDDLE] Preload failed for ${line.trigger}/${line.persona}: ${String(err)}`);
         if (onError) {
           await onError({ line, error: err });
         }

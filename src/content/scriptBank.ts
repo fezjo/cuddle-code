@@ -1,93 +1,259 @@
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { Persona, TriggerType } from "../types";
 
-const LINES: Record<TriggerType, Record<Persona, string[]>> = {
-  longLinePraise: {
-    female: [
-      "That line is wonderfully bold. I love your confidence.",
-      "Long line energy. You are cooking right now.",
-      "That was a big sweep of code. Nicely done.",
-      "You commit to the idea fully. Respect.",
-      "Such a long line, you naughty boy.",
-      "Keeping your code DRY makes me wet."
-    ],
-    male: [
-      "Huge line. Strong momentum.",
-      "You are moving with intent. Keep that flow.",
-      "Big statement line. I like it.",
-      "Power move. Keep building."
-    ]
-  },
-  idleNudge: {
-    female: [
-      "Quiet moment. Breathe in, then continue.",
-      "No rush. Your next line can be clean and calm.",
-      "Tiny pause accepted. Ready when you are.",
-      "The code is waiting for your touch.",
-      "What are you thinking about babe.",
-      "You are doing great love.",
-      "Do not forget to take breaks darling."
-    ],
-    male: [
-      "Nice pause. Reset and go.",
-      "Take your time. Next edit can be sharp.",
-      "Silence is fine. Progress resumes now.",
-      "You are still in control. Continue."
-    ]
-  },
-  sustainedTyping: {
-    female: [
-      "Steady rhythm. This is beautiful focus.",
-      "Sustained flow detected. You are locked in.",
-      "Your consistency is impressive. Keep gliding.",
-      "This pace is elegant and strong.",
-      "The sound of you typing is so calming.",
-      "Hmm, keep typing."
-    ],
-    male: [
-      "That is strong sustained output.",
-      "Excellent cadence. Keep driving.",
-      "Focus level is high. Great work.",
-      "Clean momentum. Stay with it."
-    ]
-  },
-  burstTyping: {
-    female: [
-      "Rapid burst! That spark was delightful.",
-      "Fast fingers, clear intent. Love it.",
-      "What a burst. You are absolutely on it.",
-      "That quick sprint was satisfying.",
-      "Fast fingers, I like that... a lot."
-    ],
-    male: [
-      "Burst detected. Great acceleration.",
-      "Fast sequence. Very nice.",
-      "Quick fire edits. Keep the edge.",
-      "Excellent spike in speed."
-    ]
-  }
+type ScriptLine = { trigger: TriggerType; persona: Persona; text: string };
+
+const HEAD_ALIASES: Record<string, TriggerType> = {
+  "long pause": "idleLong",
+  "quick burst": "burstTyping",
+  "sustained typing": "sustainedTyping",
+  "long line": "longLine",
+  refactor: "minorRefactor",
+  "error appears": "errorAppears",
+  "error fixed": "errorFixed",
+  "file saved": "fileSaved",
+  "code completed / function finished": "functionFinished",
+  "git commit": "gitCommit",
+  "tests passing": "testsPassing",
+  "autocomplete accepted": "autocompleteAccepted",
+  "adding comments": "addingComments",
+  "deleting code": "deletingCode",
+  "late night session": "lateNightSession",
+  "switching files / tabs": "switchingFiles",
+  "idle warning (very long pause)": "idleVeryLong",
+  "typing burst (quick flurry of keystrokes)": "burstTyping",
+  "sustained / steady typing (continuous flow)": "sustainedTyping",
+  "short pause (a few seconds of silence - most common idle trigger)": "idleShort",
+  "very short idle / hesitation (1-3 seconds)": "idleVeryShort",
+  "single line edit / small change": "singleLineEdit",
+  "backspace / delete (very frequent)": "deletingCode",
+  "autocomplete / suggestion accepted (happens constantly)": "autocompleteAccepted",
+  "quick save (ctrl/cmd + s - extremely frequent)": "fileSaved",
+  "minor refactor / small cleanup (renaming variable, extracting tiny bit, etc.)": "minorRefactor",
+  "cursor movement / navigation (arrow keys, mouse clicks, jumping around)": "cursorNavigation",
+  "format document / auto-format triggered": "formatDocument",
+  "paste action": "pasteAction",
+  "undo / redo": "undoRedo"
 };
 
+const DEFAULT_CANDIDATE_LINES_PATHS = [resolve(process.cwd(), "lines.md"), resolve(__dirname, "../lines.md")];
+
+let scriptBank: Record<TriggerType, Record<Persona, string[]>> = fallbackScriptBank();
+let unknownHeadings: string[] = [];
+let parseFailure: string | undefined;
+
+export function initializeScriptBank(output: { appendLine(message: string): void }, extensionRootPath?: string): void {
+  const parsed = parseLinesFile(extensionRootPath);
+  if (!parsed) {
+    parseFailure = "lines.md missing or invalid; using fallback script bank";
+    output.appendLine(`[CUDDLE] Script bank parse failed: ${parseFailure}`);
+    return;
+  }
+
+  scriptBank = parsed.bank;
+  unknownHeadings = parsed.unknownHeadings;
+  parseFailure = undefined;
+
+  output.appendLine(
+    `[CUDDLE] Script bank loaded from lines.md: triggers=${Object.keys(scriptBank).length} unknownHeadings=${unknownHeadings.length}`
+  );
+  if (unknownHeadings.length > 0) {
+    output.appendLine(`[CUDDLE] Unsupported headings in lines.md: ${unknownHeadings.join(", ")}`);
+  }
+}
+
+export function getScriptBankHealth(): {
+  parseFailure?: string;
+  unknownHeadings: string[];
+  mappedHeadingsCount: number;
+} {
+  return {
+    parseFailure,
+    unknownHeadings: [...unknownHeadings],
+    mappedHeadingsCount: Object.keys(scriptBank).length
+  };
+}
+
 export function pickLine(trigger: TriggerType, persona: Persona): string {
-  const choices = LINES[trigger][persona];
+  const choices = linesFor(trigger, persona);
   return choices[Math.floor(Math.random() * choices.length)] ?? "Nice work.";
 }
 
 export function linesFor(trigger: TriggerType, persona: Persona): string[] {
-  return LINES[trigger][persona];
+  const direct = scriptBank[trigger][persona];
+  if (direct.length > 0) {
+    return direct;
+  }
+
+  const fallback = fallbackTriggerFor(trigger);
+  const fallbackLines = scriptBank[fallback][persona];
+  if (fallbackLines.length > 0) {
+    return fallbackLines;
+  }
+
+  const opposite: Persona = persona === "female" ? "male" : "female";
+  const oppositeLines = scriptBank[fallback][opposite];
+  if (oppositeLines.length > 0) {
+    return oppositeLines;
+  }
+
+  return ["Keep going, I like where this is heading."];
 }
 
-export function allScriptLines(): Array<{ trigger: TriggerType; persona: Persona; text: string }> {
-  const out: Array<{ trigger: TriggerType; persona: Persona; text: string }> = [];
-  const triggers: TriggerType[] = ["longLinePraise", "idleNudge", "sustainedTyping", "burstTyping"];
+export function allScriptLines(): ScriptLine[] {
+  const out: ScriptLine[] = [];
   const personas: Persona[] = ["female", "male"];
+  const triggers = Object.keys(scriptBank) as TriggerType[];
 
   for (const trigger of triggers) {
     for (const persona of personas) {
-      for (const text of LINES[trigger][persona]) {
+      for (const text of scriptBank[trigger][persona]) {
         out.push({ trigger, persona, text });
       }
     }
   }
 
   return out;
+}
+
+function parseLinesFile(
+  extensionRootPath?: string
+): { bank: Record<TriggerType, Record<Persona, string[]>>; unknownHeadings: string[] } | undefined {
+  const candidateLinesPaths = [
+    ...(extensionRootPath ? [resolve(extensionRootPath, "lines.md")] : []),
+    ...DEFAULT_CANDIDATE_LINES_PATHS
+  ];
+
+  let raw = "";
+  for (const path of candidateLinesPaths) {
+    try {
+      raw = readFileSync(path, "utf8");
+      if (raw.trim().length > 0) {
+        break;
+      }
+    } catch {
+      continue;
+    }
+  }
+
+  if (!raw.trim()) {
+    return undefined;
+  }
+
+  const normalizedRaw = raw.replace(/[\u2018\u2019]/g, "'").replace(/[\u2013\u2014]/g, "-");
+  const lines = normalizedRaw.split(/\r?\n/);
+  const bank = fallbackScriptBank();
+  const unknown = new Set<string>();
+  let current: TriggerType | undefined;
+
+  for (const line of lines) {
+    const text = line.trim();
+    if (!text) {
+      continue;
+    }
+
+    if (text.startsWith("#")) {
+      const heading = normalizeHeading(text.slice(1));
+      const mapped = HEAD_ALIASES[heading];
+      if (!mapped) {
+        current = undefined;
+        unknown.add(heading);
+        continue;
+      }
+      current = mapped;
+      continue;
+    }
+
+    if (!current) {
+      continue;
+    }
+
+    const cleaned = sanitizeLine(text);
+    if (!cleaned) {
+      continue;
+    }
+    bank[current].female.push(cleaned);
+    bank[current].male.push(cleaned);
+  }
+
+  for (const trigger of Object.keys(bank) as TriggerType[]) {
+    bank[trigger].female = unique(bank[trigger].female);
+    bank[trigger].male = unique(bank[trigger].male);
+  }
+
+  return { bank, unknownHeadings: [...unknown] };
+}
+
+function fallbackScriptBank(): Record<TriggerType, Record<Persona, string[]>> {
+  return {
+    idleVeryShort: { female: ["One little pause, then back to it."], male: ["One little pause, then back to it."] },
+    idleShort: { female: ["Tiny pause accepted. Ready when you are."], male: ["Tiny pause accepted. Ready when you are."] },
+    idleLong: { female: ["Quiet moment. Breathe in, then continue."], male: ["Quiet moment. Breathe in, then continue."] },
+    idleVeryLong: {
+      female: ["You have been quiet for a while. Come back when you are ready."],
+      male: ["You have been quiet for a while. Come back when you are ready."]
+    },
+    burstTyping: { female: ["Fast fingers, clear intent."], male: ["Fast fingers, clear intent."] },
+    sustainedTyping: { female: ["Steady rhythm. Beautiful focus."], male: ["Steady rhythm. Beautiful focus."] },
+    longLine: { female: ["That long line had confidence."], male: ["That long line had confidence."] },
+    minorRefactor: { female: ["Cleanups like that feel good."], male: ["Cleanups like that feel good."] },
+    errorAppears: { female: ["A red flag showed up. You can fix this."], male: ["A red flag showed up. You can fix this."] },
+    errorFixed: { female: ["There it is, fixed and clean."], male: ["There it is, fixed and clean."] },
+    fileSaved: { female: ["Saved. Work protected."], male: ["Saved. Work protected."] },
+    functionFinished: { female: ["Function complete. Nicely done."], male: ["Function complete. Nicely done."] },
+    gitCommit: { female: ["Commit complete. Nice discipline."], male: ["Commit complete. Nice discipline."] },
+    testsPassing: { female: ["All tests passing. Gorgeous."], male: ["All tests passing. Gorgeous."] },
+    autocompleteAccepted: { female: ["Good suggestion accepted."], male: ["Good suggestion accepted."] },
+    addingComments: { female: ["Nice comment. Future you will smile."], male: ["Nice comment. Future you will smile."] },
+    deletingCode: { female: ["You trimmed what did not belong."], male: ["You trimmed what did not belong."] },
+    lateNightSession: { female: ["Late session focus. Proud of you."], male: ["Late session focus. Proud of you."] },
+    switchingFiles: { female: ["Smooth file switch."], male: ["Smooth file switch."] },
+    singleLineEdit: { female: ["Small change, sharp improvement."], male: ["Small change, sharp improvement."] },
+    cursorNavigation: { female: ["Clean navigation."], male: ["Clean navigation."] },
+    formatDocument: { female: ["Formatting made everything neat."], male: ["Formatting made everything neat."] },
+    pasteAction: { female: ["Paste landed clean."], male: ["Paste landed clean."] },
+    undoRedo: { female: ["Undo and redo, thoughtful iteration."], male: ["Undo and redo, thoughtful iteration."] },
+    sandyMention: {
+      female: ["I am here, keep going - you have got this."],
+      male: ["I am here, keep going - you have got this."]
+    }
+  };
+}
+
+function fallbackTriggerFor(trigger: TriggerType): TriggerType {
+  switch (trigger) {
+    case "idleVeryShort":
+      return "idleShort";
+    case "idleVeryLong":
+      return "idleLong";
+    case "singleLineEdit":
+      return "minorRefactor";
+    case "cursorNavigation":
+      return "switchingFiles";
+    default:
+      return trigger;
+  }
+}
+
+function sanitizeLine(text: string): string {
+  return text
+    .replace(/^[-*]\s*/, "")
+    .replace(/[\u2018\u2019]/g, "'")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function normalizeHeading(text: string): string {
+  return text
+    .toLowerCase()
+    .replace(/[\u2018\u2019]/g, "'")
+    .replace(/[\u2013\u2014]/g, "-")
+    .replace(/["'`]/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function unique(values: string[]): string[] {
+  return [...new Set(values.map((x) => sanitizeLine(x)).filter(Boolean))];
 }

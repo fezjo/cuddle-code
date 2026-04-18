@@ -1,43 +1,52 @@
 import * as vscode from "vscode";
 import { getConfig, toggleEnabled, toggleMode } from "./config";
+import { allScriptLines, getScriptBankHealth, initializeScriptBank, linesFor, pickLine } from "./content/scriptBank";
+import { generateSandyLine } from "./llm/openaiClient";
+import { TriggerScheduler } from "./telemetry/scheduler";
 import { TypingTracker } from "./telemetry/typingTracker";
-import { allScriptLines, linesFor, pickLine } from "./content/scriptBank";
-import { CoachConfig, Persona, TriggerType } from "./types";
+import { CoachConfig, Persona, TriggerPayload, TriggerType } from "./types";
 import { ElevenLabsApiError, synthesizeWithElevenLabs } from "./voice/elevenlabsClient";
-import { playMp3Buffer } from "./voice/player";
 import { AudioCache } from "./voice/cache";
+import { playMp3Buffer } from "./voice/player";
+
+const TEST_SUCCESS_PATTERNS = [/\b(\d+)\s+passed\b/i, /\btest result:\s*ok\b/i, /\bpass(?:ing)?\b/i, /\bok\b/i];
 
 export function activate(context: vscode.ExtensionContext): void {
-  const output = vscode.window.createOutputChannel("ASMR Coach");
+  const output = vscode.window.createOutputChannel("Cuddle Code");
   context.subscriptions.push(output);
 
+  initializeScriptBank(output, context.extensionPath);
+
   let config = getConfig();
-  let busy = false;
+  let responseQueue: Promise<void> = Promise.resolve();
   const cache = new AudioCache(context, output);
+  const scheduler = new TriggerScheduler(config.pacingMode);
+  const terminalOutput = new WeakMap<vscode.TerminalShellExecution, string>();
 
   const tracker = new TypingTracker({
     config,
     output,
-    onTrigger: async ({ trigger }) => {
-      if (busy) {
-        return;
-      }
-      busy = true;
-      try {
-        await respond(trigger, output);
-      } finally {
-        busy = false;
-      }
+    onTrigger: (event) => {
+      responseQueue = responseQueue
+        .then(async () => {
+          await respond(event, output);
+        })
+        .catch((err) => {
+          output.appendLine(`[CUDDLE] Trigger queue error: ${String(err)}`);
+        });
     }
   });
   context.subscriptions.push({ dispose: () => tracker.dispose() });
 
   context.subscriptions.push(
     vscode.workspace.onDidChangeConfiguration((e) => {
-      if (e.affectsConfiguration("asmrCoach")) {
+      if (e.affectsConfiguration("cuddleCode")) {
         config = getConfig();
         tracker.updateConfig(config);
-        output.appendLine(`[ASMR] Config updated: mode=${config.mode} enabled=${config.enabled}`);
+        scheduler.updateMode(config.pacingMode);
+        output.appendLine(
+          `[CUDDLE] Config updated: mode=${config.mode} enabled=${config.enabled} pacingMode=${config.pacingMode}`
+        );
       }
     })
   );
@@ -48,90 +57,160 @@ export function activate(context: vscode.ExtensionContext): void {
       if (!editor || editor.document.uri.toString() !== e.document.uri.toString()) {
         return;
       }
-      tracker.recordEdit(editor);
+      tracker.recordEdit(e, editor);
+      const line = editor.document.lineAt(editor.selection.active.line).text;
+      tracker.onFunctionFinished(line);
     })
   );
 
-  context.subscriptions.push(
-    vscode.commands.registerCommand("asmrCoach.toggleEnabled", async () => {
-      const next = await toggleEnabled();
-      vscode.window.showInformationMessage(`ASMR Coach ${next ? "enabled" : "disabled"}.`);
-    })
-  );
+  context.subscriptions.push(vscode.workspace.onDidSaveTextDocument((doc) => tracker.onSave(doc)));
+  context.subscriptions.push(vscode.window.onDidChangeActiveTextEditor((editor) => tracker.onActiveEditorChanged(editor)));
+  context.subscriptions.push(vscode.window.onDidChangeTextEditorSelection((event) => tracker.onSelectionChanged(event)));
+  context.subscriptions.push(vscode.languages.onDidChangeDiagnostics((e) => tracker.onDiagnosticsChanged(e.uris)));
 
   context.subscriptions.push(
-    vscode.commands.registerCommand("asmrCoach.toggleMode", async () => {
-      const next = await toggleMode();
-      vscode.window.showInformationMessage(`ASMR Coach mode: ${next}.`);
+    vscode.window.onDidStartTerminalShellExecution((event) => {
+      void captureTerminalOutput(event.execution, terminalOutput);
     })
   );
-
   context.subscriptions.push(
-    vscode.commands.registerCommand("asmrCoach.testVoiceLine", async () => {
-      await respond("burstTyping", output, true);
-      vscode.window.showInformationMessage("ASMR Coach test line triggered.");
-    })
-  );
-
-  context.subscriptions.push(
-    vscode.commands.registerCommand("asmrCoach.testVoiceLineForceFetch", async () => {
-      await respond("burstTyping", output, true, { ignoreCache: true, forceAudioFetch: true });
-      vscode.window.showInformationMessage("ASMR Coach forced fetch test line triggered.");
-    })
-  );
-
-  context.subscriptions.push(
-    vscode.commands.registerCommand("asmrCoach.showTriggerDebug", () => {
-      output.show(true);
-      output.appendLine("[ASMR] Debug channel opened.");
-    })
-  );
-
-  context.subscriptions.push(
-    vscode.commands.registerCommand("asmrCoach.preGenerateVoiceCache", async () => {
-      const current = getConfig();
-      if (!current.apiKey) {
-        vscode.window.showWarningMessage("ASMR Coach: set asmrCoach.apiKey first.");
+    vscode.window.onDidEndTerminalShellExecution((event) => {
+      const command = event.execution.commandLine.value.toLowerCase();
+      if (event.exitCode !== 0) {
         return;
       }
-      if (current.mode !== "audio") {
-        output.appendLine("[ASMR] Pre-generate invoked while in mock mode; still generating cache with ElevenLabs.");
+      if (/\bgit\s+commit\b/.test(command)) {
+        tracker.onTerminalCommandEnd(event);
+        return;
       }
+      if (isTestCommand(command)) {
+        const outText = terminalOutput.get(event.execution) ?? "";
+        if (TEST_SUCCESS_PATTERNS.some((p) => p.test(outText))) {
+          tracker.onTerminalCommandEnd(event);
+        } else {
+          output.appendLine("[CUDDLE] Strict testsPassing skipped: no recognized success summary in output.");
+        }
+      }
+    })
+  );
 
+  context.subscriptions.push(
+    vscode.commands.registerCommand("cuddleCode.toggleEnabled", async () => {
+      const next = await toggleEnabled();
+      vscode.window.showInformationMessage(`Cuddle Code ${next ? "enabled" : "disabled"}.`);
+    })
+  );
+
+  context.subscriptions.push(
+    vscode.commands.registerCommand("cuddleCode.toggleMode", async () => {
+      const next = await toggleMode();
+      vscode.window.showInformationMessage(`Cuddle Code mode: ${next}.`);
+    })
+  );
+
+  context.subscriptions.push(
+    vscode.commands.registerCommand("cuddleCode.testVoiceLine", async () => {
+      await respond({ trigger: "burstTyping", confidence: "high", detail: "manual-test", text: "", persona: "female" }, output, true);
+      vscode.window.showInformationMessage("Cuddle Code test line triggered.");
+    })
+  );
+
+  context.subscriptions.push(
+    vscode.commands.registerCommand("cuddleCode.testVoiceLineForceFetch", async () => {
+      await respond(
+        { trigger: "burstTyping", confidence: "high", detail: "manual-test-force", text: "", persona: "female" },
+        output,
+        true,
+        { ignoreCache: true, forceAudioFetch: true }
+      );
+      vscode.window.showInformationMessage("Cuddle Code forced fetch test line triggered.");
+    })
+  );
+
+  context.subscriptions.push(
+    vscode.commands.registerCommand("cuddleCode.showTriggerDebug", () => {
+      output.show(true);
+      output.appendLine("[CUDDLE] Debug channel opened.");
+    })
+  );
+
+  context.subscriptions.push(
+    vscode.commands.registerCommand("cuddleCode.showTriggerHealth", () => {
+      const schedulerHealth = scheduler.getHealth();
+      const scriptHealth = getScriptBankHealth();
+      output.appendLine(
+        `[CUDDLE] Trigger health mode=${schedulerHealth.mode} tokens=${schedulerHealth.tokens} fired=${JSON.stringify(
+          schedulerHealth.firedByTrigger
+        )} skipped=${JSON.stringify(schedulerHealth.skippedByReason)} parseFailure=${scriptHealth.parseFailure ?? "none"}`
+      );
+      output.show(true);
+      vscode.window.showInformationMessage("Cuddle Code trigger health logged in output.");
+    })
+  );
+
+  context.subscriptions.push(
+    vscode.commands.registerCommand("cuddleCode.simulateTrigger", async () => {
+      const triggers = [
+        "idleShort",
+        "burstTyping",
+        "sustainedTyping",
+        "errorFixed",
+        "gitCommit",
+        "testsPassing",
+        "sandyMention"
+      ] as TriggerType[];
+      const pick = await vscode.window.showQuickPick(triggers, { placeHolder: "Select trigger to simulate" });
+      if (!pick) {
+        return;
+      }
+      const persona = choosePersona(pick, getConfig());
+      const line = pick === "sandyMention" ? "Sandy: I am right here with you." : pickLine(pick, persona);
+      output.appendLine(`[CUDDLE][SIMULATE] trigger=${pick} persona=${persona} line=${line}`);
+      output.show(true);
+    })
+  );
+
+  context.subscriptions.push(
+    vscode.commands.registerCommand("cuddleCode.preGenerateVoiceCache", async () => {
+      const current = getConfig();
+      if (!current.apiKey) {
+        vscode.window.showWarningMessage("Cuddle Code: set cuddleCode.apiKey first.");
+        return;
+      }
       const scripts = currentRouteScriptLines(current);
       await vscode.window.withProgress(
         {
           location: vscode.ProgressLocation.Notification,
-          title: "ASMR Coach: pre-generating voice cache",
+          title: "Cuddle Code: pre-generating voice cache",
           cancellable: false
         },
         async (progress) => {
           const before = await cache.stats(scripts);
           output.appendLine(
-            `[ASMR] Cache before pre-generate: total=${before.total} cached=${before.cached} blocked=${before.blocked} missing=${before.missing}`
+            `[CUDDLE] Cache before pre-generate: total=${before.total} cached=${before.cached} blocked=${before.blocked} missing=${before.missing}`
           );
           progress.report({ message: "Generating clips with ElevenLabs..." });
-          const stats = await cache.preload(scripts, async ({ persona, text }) => {
-            return await synthesizeWithElevenLabs({
-              apiKey: current.apiKey,
-              persona,
-              text
-            });
-          }, async ({ line, error }) => {
-            await maybeBlockUnusableVoice(line, error);
-          });
-          progress.report({
-            message: `Done. Generated ${stats.generated}, reused ${stats.reused}, retriedBlocked ${stats.retriedBlocked}, blocked ${stats.blocked}, failed ${stats.failed}.`
-          });
+          const stats = await cache.preload(
+            scripts,
+            async ({ persona, text }) =>
+              await synthesizeWithElevenLabs({
+                apiKey: current.apiKey,
+                persona,
+                text
+              }),
+            async ({ line, error }) => {
+              await maybeBlockUnusableVoice(line, error);
+            }
+          );
           output.appendLine(
-            `[ASMR] Pre-generate complete: generated=${stats.generated} reused=${stats.reused} retriedBlocked=${stats.retriedBlocked} blocked=${stats.blocked} failed=${stats.failed}`
+            `[CUDDLE] Pre-generate complete: generated=${stats.generated} reused=${stats.reused} retriedBlocked=${stats.retriedBlocked} blocked=${stats.blocked} failed=${stats.failed}`
           );
           const after = await cache.stats(scripts);
           output.appendLine(
-            `[ASMR] Cache after pre-generate: total=${after.total} cached=${after.cached} blocked=${after.blocked} missing=${after.missing}`
+            `[CUDDLE] Cache after pre-generate: total=${after.total} cached=${after.cached} blocked=${after.blocked} missing=${after.missing}`
           );
           vscode.window.showInformationMessage(
-            `ASMR Coach cache ready. Generated ${stats.generated}, reused ${stats.reused}, retriedBlocked ${stats.retriedBlocked}, blocked ${stats.blocked}, failed ${stats.failed}.`
+            `Cuddle Code cache ready. Generated ${stats.generated}, reused ${stats.reused}, retriedBlocked ${stats.retriedBlocked}, blocked ${stats.blocked}, failed ${stats.failed}.`
           );
         }
       );
@@ -139,9 +218,9 @@ export function activate(context: vscode.ExtensionContext): void {
   );
 
   context.subscriptions.push(
-    vscode.commands.registerCommand("asmrCoach.clearVoiceCache", async () => {
+    vscode.commands.registerCommand("cuddleCode.clearVoiceCache", async () => {
       const answer = await vscode.window.showWarningMessage(
-        "Clear ASMR Coach voice cache? This removes all generated MP3s and cache index entries.",
+        "Clear Cuddle Code voice cache? This removes all generated MP3s and cache index entries.",
         { modal: true },
         "Clear Cache"
       );
@@ -150,113 +229,150 @@ export function activate(context: vscode.ExtensionContext): void {
       }
 
       await cache.clear();
-      output.appendLine("[ASMR] Voice cache cleared.");
-      vscode.window.showInformationMessage("ASMR Coach voice cache cleared.");
+      output.appendLine("[CUDDLE] Voice cache cleared.");
+      vscode.window.showInformationMessage("Cuddle Code voice cache cleared.");
     })
   );
 
   context.subscriptions.push(
-    vscode.commands.registerCommand("asmrCoach.showCacheStats", async () => {
-      const scripts = allScriptLines();
+    vscode.commands.registerCommand("cuddleCode.showCacheStats", async () => {
+      const scripts = allScriptLines().filter((x) => x.trigger !== "sandyMention");
       const stats = await cache.stats(scripts);
 
       const routedScripts = currentRouteScriptLines(getConfig());
       const routedStats = await cache.stats(routedScripts);
 
       const message =
-        `ASMR cache (all personas): total=${stats.total}, cached=${stats.cached}, blocked=${stats.blocked}, missing=${stats.missing} | ` +
+        `Cuddle cache (all personas): total=${stats.total}, cached=${stats.cached}, blocked=${stats.blocked}, missing=${stats.missing} | ` +
         `active route: total=${routedStats.total}, cached=${routedStats.cached}, blocked=${routedStats.blocked}, missing=${routedStats.missing}`;
-      output.appendLine(`[ASMR] ${message}`);
+      output.appendLine(`[CUDDLE] ${message}`);
       vscode.window.showInformationMessage(message);
       output.show(true);
     })
   );
 
-  output.appendLine("[ASMR] Extension activated.");
-
+  output.appendLine("[CUDDLE] Extension activated.");
   void maybePreGenerateOnStartup();
 
   async function respond(
-    trigger: TriggerType,
+    event: TriggerPayload,
     out: vscode.OutputChannel,
     force = false,
     options?: { ignoreCache?: boolean; forceAudioFetch?: boolean }
   ): Promise<void> {
     const current = getConfig();
-    out.appendLine(
-      `[ASMR] Respond start: trigger=${trigger} mode=${current.mode} enabled=${current.enabled} personaMode=${current.voicePersona} pregen=${current.usePreGeneratedAudio} ignoreCache=${options?.ignoreCache ? "yes" : "no"} forceAudioFetch=${options?.forceAudioFetch ? "yes" : "no"}`
-    );
 
     if (!current.enabled && !force) {
-      out.appendLine("[ASMR] Respond skipped: extension disabled and not forced.");
+      out.appendLine("[CUDDLE] Respond skipped: extension disabled.");
       return;
     }
 
-    const persona: Persona = choosePersona(trigger, current);
-    const text = pickLine(trigger, persona);
-    out.appendLine(`[ASMR][TEXT][${persona}][${trigger}] ${text}`);
+    const decision = scheduler.allow(event.trigger, Date.now(), force || Boolean(event.forceBypassScheduler));
+    if (current.debugLogs) {
+      out.appendLine(`[CUDDLE] Trigger candidate: trigger=${event.trigger} confidence=${event.confidence} detail=${event.detail}`);
+    }
+    if (!decision.allowed) {
+      out.appendLine(
+        `[CUDDLE] Trigger skipped: trigger=${event.trigger} confidence=${event.confidence} reason=${decision.reason} mode=${decision.mode}`
+      );
+      return;
+    }
+
+    const persona: Persona = choosePersona(event.trigger, current);
+    let text = pickLine(event.trigger, persona);
+    if (event.trigger === "sandyMention") {
+      text = await buildSandyResponse(current, event.metadata?.sourceText ?? "", event.metadata?.languageId, out);
+    }
+
+    out.appendLine(
+      `[CUDDLE] Trigger fired: trigger=${event.trigger} confidence=${event.confidence} detail=${event.detail} mode=${decision.mode} persona=${persona} line=${text}`
+    );
 
     if (current.mode === "mock" && !options?.forceAudioFetch) {
-      out.appendLine(`[ASMR][MOCK][${persona}][${trigger}] ${text}`);
-      vscode.window.setStatusBarMessage("ASMR Coach: mock line emitted", 2500);
+      out.appendLine(`[CUDDLE][MOCK][${persona}][${event.trigger}] ${text}`);
+      vscode.window.setStatusBarMessage("Cuddle Code: mock line emitted", 2500);
       return;
-    }
-
-    if (current.mode === "mock" && options?.forceAudioFetch) {
-      out.appendLine("[ASMR] Force fetch requested: proceeding with audio synthesis despite mock mode.");
     }
 
     if (!current.apiKey) {
-      out.appendLine("[ASMR] Audio mode set, but apiKey is missing.");
-      vscode.window.showWarningMessage("ASMR Coach: audio mode needs asmrCoach.apiKey");
+      out.appendLine("[CUDDLE] Audio mode set, but apiKey is missing.");
+      vscode.window.showWarningMessage("Cuddle Code: audio mode needs cuddleCode.apiKey");
       return;
     }
 
     try {
       let audio;
       if (current.usePreGeneratedAudio && !options?.ignoreCache) {
-        const cached = await cache.get({ trigger, persona, text });
+        const cached = await cache.get({ trigger: event.trigger, persona, text });
         if (cached.audio) {
           audio = cached.audio;
-          out.appendLine(`[ASMR] Playing cached audio for ${trigger}.`);
+          out.appendLine(
+            `[CUDDLE] Audio cache hit trigger=${event.trigger} persona=${persona} confidence=${event.confidence} mode=${decision.mode}`
+          );
         } else if (cached.blockedReason) {
           out.appendLine(
-            `[ASMR] Cached block for ${trigger}/${persona} (${cached.blockedReason}); skipping on-demand generation to avoid silence.`
+            `[CUDDLE] Audio cache blocked trigger=${event.trigger} persona=${persona} reason=${cached.blockedReason}; using fallback`
           );
-          await playFallbackFromCacheOrMock(trigger, out, current);
+          await playFallbackFromCacheOrMock(event.trigger, out, current, event.confidence, decision.mode);
           return;
         } else if (cached.indexed) {
-          out.appendLine(`[ASMR] Cache index hit without file for ${trigger}; skipping synthesis to avoid duplicate credits.`);
-          await playFallbackFromCacheOrMock(trigger, out, current);
+          out.appendLine(`[CUDDLE] Audio cache index stale trigger=${event.trigger}; using fallback.`);
+          await playFallbackFromCacheOrMock(event.trigger, out, current, event.confidence, decision.mode);
           return;
+        } else {
+          out.appendLine(`[CUDDLE] Audio cache miss trigger=${event.trigger} persona=${persona}`);
         }
       }
 
       if (!audio) {
-        out.appendLine(`[ASMR] Synthesizing ${trigger} with ${persona} voice.`);
+        out.appendLine(`[CUDDLE] Synthesizing trigger=${event.trigger} persona=${persona}`);
         try {
           audio = await synthesizeWithElevenLabs({
             apiKey: current.apiKey,
             persona,
             text
           });
-          out.appendLine(`[ASMR] Synthesis success for ${trigger}/${persona}.`);
         } catch (err) {
-          await maybeBlockUnusableVoice({ trigger, persona, text }, err);
+          await maybeBlockUnusableVoice({ trigger: event.trigger, persona, text }, err);
           throw err;
         }
         if (current.usePreGeneratedAudio) {
-          await cache.put({ trigger, persona, text, audio });
-          out.appendLine(`[ASMR] Cached synthesized audio for ${trigger}/${persona}.`);
+          await cache.put({ trigger: event.trigger, persona, text, audio });
+          out.appendLine(`[CUDDLE] Cached synthesized audio for ${event.trigger}/${persona}.`);
         }
       }
 
       await playMp3Buffer(audio);
-      out.appendLine(`[ASMR] Played audio line for ${trigger}.`);
-      vscode.window.setStatusBarMessage(`ASMR Coach played: ${trigger}`, 2500);
+      out.appendLine(`[CUDDLE] Played audio line for ${event.trigger}.`);
+      vscode.window.setStatusBarMessage(`Cuddle Code played: ${event.trigger}`, 2500);
     } catch (err) {
-      out.appendLine(`[ASMR] Audio failed: ${String(err)}`);
-      vscode.window.showErrorMessage(`ASMR Coach audio failed. Open 'ASMR Coach' output for details.`);
+      out.appendLine(`[CUDDLE] Audio failed: ${String(err)}`);
+      vscode.window.showErrorMessage("Cuddle Code audio failed. Open 'Cuddle Code' output for details.");
+    }
+  }
+
+  async function buildSandyResponse(
+    current: CoachConfig,
+    sourceText: string,
+    languageId: string | undefined,
+    out: vscode.OutputChannel
+  ): Promise<string> {
+    if (!sourceText.trim()) {
+      return "I am here, keep going - you have got this.";
+    }
+    if (!current.llmApiKey) {
+      out.appendLine("[CUDDLE] Sandy mention fallback: missing cuddleCode.llmApiKey");
+      return "I am here, keep going - you have got this.";
+    }
+    try {
+      return await generateSandyLine({
+        apiKey: current.llmApiKey,
+        languageId,
+        mentionText: sourceText
+      });
+    } catch (err) {
+      out.appendLine(`[CUDDLE] Sandy mention fallback: LLM error ${String(err)}`);
+      return "I am here, keep going - you have got this.";
     }
   }
 
@@ -266,29 +382,32 @@ export function activate(context: vscode.ExtensionContext): void {
       return;
     }
     if (!current.apiKey) {
-      output.appendLine("[ASMR] Startup pre-generate skipped: missing apiKey.");
+      output.appendLine("[CUDDLE] Startup pre-generate skipped: missing apiKey.");
       return;
     }
 
     const scripts = currentRouteScriptLines(current);
     const complete = await cache.hasAll(scripts);
     if (complete) {
-      output.appendLine("[ASMR] Startup pre-generate skipped: cache already complete.");
+      output.appendLine("[CUDDLE] Startup pre-generate skipped: cache already complete.");
       return;
     }
 
-    output.appendLine("[ASMR] Startup pre-generate starting...");
-    const stats = await cache.preload(scripts, async ({ persona, text }) => {
-      return await synthesizeWithElevenLabs({
-        apiKey: current.apiKey,
-        persona,
-        text
-      });
-    }, async ({ line, error }) => {
-      await maybeBlockUnusableVoice(line, error);
-    });
+    output.appendLine("[CUDDLE] Startup pre-generate starting...");
+    const stats = await cache.preload(
+      scripts,
+      async ({ persona, text }) =>
+        await synthesizeWithElevenLabs({
+          apiKey: current.apiKey,
+          persona,
+          text
+        }),
+      async ({ line, error }) => {
+        await maybeBlockUnusableVoice(line, error);
+      }
+    );
     output.appendLine(
-      `[ASMR] Startup pre-generate complete: generated=${stats.generated} reused=${stats.reused} retriedBlocked=${stats.retriedBlocked} blocked=${stats.blocked} failed=${stats.failed}`
+      `[CUDDLE] Startup pre-generate complete: generated=${stats.generated} reused=${stats.reused} retriedBlocked=${stats.retriedBlocked} blocked=${stats.blocked} failed=${stats.failed}`
     );
   }
 
@@ -302,14 +421,16 @@ export function activate(context: vscode.ExtensionContext): void {
 
     if (error.status === 402 && error.code === "paid_plan_required") {
       await cache.block({ ...line, reason: "paid_plan_required" });
-      output.appendLine(`[ASMR] Marked line as blocked due to plan limits: ${line.trigger}/${line.persona}`);
+      output.appendLine(`[CUDDLE] Marked line as blocked due to plan limits: ${line.trigger}/${line.persona}`);
     }
   }
 
   async function playFallbackFromCacheOrMock(
     trigger: TriggerType,
     out: vscode.OutputChannel,
-    current: CoachConfig
+    current: CoachConfig,
+    confidence: string,
+    mode: string
   ): Promise<void> {
     const personas = fallbackPersonaOrder(trigger, current);
     for (const persona of personas) {
@@ -317,8 +438,10 @@ export function activate(context: vscode.ExtensionContext): void {
         const cached = await cache.get({ trigger, persona, text });
         if (cached.audio) {
           await playMp3Buffer(cached.audio);
-          out.appendLine(`[ASMR] Played cached fallback audio for ${trigger} using ${persona}.`);
-          vscode.window.setStatusBarMessage(`ASMR Coach fallback audio: ${trigger}`, 2500);
+          out.appendLine(
+            `[CUDDLE] Played cached fallback audio trigger=${trigger} persona=${persona} confidence=${confidence} mode=${mode}`
+          );
+          vscode.window.setStatusBarMessage(`Cuddle Code fallback audio: ${trigger}`, 2500);
           return;
         }
       }
@@ -326,19 +449,28 @@ export function activate(context: vscode.ExtensionContext): void {
 
     const fallbackPersona = personas[0] ?? "female";
     const fallback = pickLine(trigger, fallbackPersona);
-    out.appendLine(`[ASMR][TEXT][fallback:${fallbackPersona}][${trigger}] ${fallback}`);
-    out.appendLine(`[ASMR][MOCK][fallback:${fallbackPersona}][${trigger}] ${fallback}`);
-    vscode.window.setStatusBarMessage(`ASMR Coach fallback text: ${trigger}`, 2500);
+    out.appendLine(`[CUDDLE][MOCK][fallback:${fallbackPersona}][${trigger}] ${fallback}`);
+    vscode.window.setStatusBarMessage(`Cuddle Code fallback text: ${trigger}`, 2500);
   }
 
   function currentRouteScriptLines(current: CoachConfig): Array<{ trigger: TriggerType; persona: Persona; text: string }> {
-    const triggers: TriggerType[] = ["longLinePraise", "idleNudge", "sustainedTyping", "burstTyping"];
+    const dynamicTriggers = new Set<TriggerType>(["sandyMention"]);
     const routed: Array<{ trigger: TriggerType; persona: Persona; text: string }> = [];
-    for (const trigger of triggers) {
-      const persona = choosePersona(trigger, current);
-      for (const text of linesFor(trigger, persona)) {
-        routed.push({ trigger, persona, text });
+    const seen = new Set<string>();
+    for (const line of allScriptLines()) {
+      if (dynamicTriggers.has(line.trigger)) {
+        continue;
       }
+      const routedPersona = choosePersona(line.trigger, current);
+      if (line.persona !== routedPersona) {
+        continue;
+      }
+      const key = `${line.trigger}|${line.persona}|${line.text}`;
+      if (seen.has(key)) {
+        continue;
+      }
+      seen.add(key);
+      routed.push(line);
     }
     return routed;
   }
@@ -355,7 +487,7 @@ function choosePersona(trigger: TriggerType, current: CoachConfig): Persona {
   if (current.voicePersona === "male") {
     return "male";
   }
-  if (trigger === "idleNudge") {
+  if (trigger === "idleLong" || trigger === "idleVeryLong") {
     return "male";
   }
   return "female";
@@ -368,4 +500,27 @@ function fallbackPersonaOrder(trigger: TriggerType, current: CoachConfig): Perso
     return [primary, secondary];
   }
   return [primary];
+}
+
+async function captureTerminalOutput(
+  execution: vscode.TerminalShellExecution,
+  store: WeakMap<vscode.TerminalShellExecution, string>
+): Promise<void> {
+  let chunks = "";
+  try {
+    const stream = execution.read();
+    for await (const data of stream) {
+      chunks += data;
+      if (chunks.length > 5000) {
+        chunks = chunks.slice(-5000);
+      }
+    }
+  } catch {
+    return;
+  }
+  store.set(execution, chunks.toLowerCase());
+}
+
+function isTestCommand(command: string): boolean {
+  return /\b(npm\s+test|pnpm\s+test|yarn\s+test|pytest|cargo\s+test|go\s+test|ctest|jest|vitest|mocha)\b/.test(command);
 }

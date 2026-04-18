@@ -1,4 +1,4 @@
-# ASMR Coach - Next Agent Memory / Implementation Plan
+# Cuddle Code - Next Agent Memory / Implementation Plan
 
 ## Mission
 Build a calm, supportive coding companion with occasional encouragement (not noise), high-confidence triggers, and robust cache/cost behavior.
@@ -8,7 +8,7 @@ Build a calm, supportive coding companion with occasional encouragement (not noi
 - ElevenLabs integration with fixed voices:
   - Female: `j05EIz3iI3JmBTWC3CsA`
   - Male: `HgyIHe81F3nXywNwkraY`
-- Persona routing config exists and defaults to female (`asmrCoach.voicePersona` with `female|male|mixed`).
+- Persona routing config exists and defaults to female (`cuddleCode.voicePersona` with `female|male|mixed`).
 - Audio cache exists in global storage with:
   - pre-generation command
   - clear cache command
@@ -36,7 +36,7 @@ Build a calm, supportive coding companion with occasional encouragement (not noi
 ## TODO (must implement)
 - [ ] Load all triggers/lines from `lines.md` (data-driven), not hardcoded-only logic.
 - [ ] Add robust header->trigger mapping with aliases.
-- [ ] Add pacing mode setting: `asmrCoach.pacingMode = debug|demo|normal`.
+- [ ] Add pacing mode setting: `cuddleCode.pacingMode = debug|demo|normal`.
 - [ ] Implement central scheduler with cooldown budgets and rare cluster behavior.
 - [ ] Add high-confidence detectors for all feasible triggers.
 - [ ] Add Sandy comment-mention detector for Python/C++/Rust comments.
@@ -155,7 +155,7 @@ Use a central message governor:
 
 ### API wiring
 - Keep TTS on ElevenLabs.
-- Add optional `asmrCoach.llmProvider` + `asmrCoach.llmApiKey`.
+- Add optional `cuddleCode.llmProvider` + `cuddleCode.llmApiKey`.
 - If LLM unavailable, use deterministic template fallback:
   - "I am here, keep going - you have got this."
 
@@ -177,8 +177,8 @@ No heuristic from random green text alone.
 ## Observability and Commands
 - Keep existing commands.
 - Add:
-  - `ASMR Coach: Show Trigger Health` (counts by trigger fired/skipped reason).
-  - `ASMR Coach: Simulate Trigger` (dry-run text selection without TTS).
+- `Cuddle Code: Show Trigger Health` (counts by trigger fired/skipped reason).
+- `Cuddle Code: Simulate Trigger` (dry-run text selection without TTS).
 - Ensure debug logs always include:
   - trigger id, confidence, selected line, persona, cache hit/miss, skip reason, mode.
 

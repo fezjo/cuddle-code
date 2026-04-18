@@ -1,7 +1,7 @@
 import * as vscode from "vscode";
 import { CoachConfig } from "./types";
 
-const SECTION = "asmrCoach";
+const SECTION = "cuddleCode";
 
 export function getConfig(): CoachConfig {
   const config = vscode.workspace.getConfiguration(SECTION);
@@ -23,7 +23,9 @@ export function getConfig(): CoachConfig {
     debugLogs: config.get<boolean>("debugLogs", true),
     usePreGeneratedAudio: config.get<boolean>("usePreGeneratedAudio", true),
     preGenerateOnStartup: config.get<boolean>("preGenerateOnStartup", false),
-    voicePersona: config.get<"female" | "male" | "mixed">("voicePersona", "female")
+    voicePersona: config.get<"female" | "male" | "mixed">("voicePersona", "female"),
+    pacingMode: config.get<"normal" | "demo" | "debug">("pacingMode", "normal"),
+    llmApiKey: config.get<string>("llmApiKey", "").trim()
   };
 }
 

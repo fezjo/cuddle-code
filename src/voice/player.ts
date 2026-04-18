@@ -6,7 +6,7 @@ import { spawn } from "node:child_process";
 import { Buffer } from "node:buffer";
 
 export async function playMp3Buffer(audio: Buffer): Promise<void> {
-  const file = join(tmpdir(), `asmr-coach-${randomUUID()}.mp3`);
+  const file = join(tmpdir(), `cuddle-code-${randomUUID()}.mp3`);
   await fs.writeFile(file, audio);
   try {
     await playFile(file);
