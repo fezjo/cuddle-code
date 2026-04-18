@@ -1,0 +1,5 @@
+src/**
+tsconfig.json
+esbuild.mjs
+*.ts
+node_modules/**/.cache/**

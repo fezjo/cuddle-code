@@ -1,0 +1,25 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "type": "npm",
+      "script": "watch",
+      "isBackground": true,
+      "problemMatcher": {
+        "owner": "typescript",
+        "background": {
+          "activeOnStart": true,
+          "beginsPattern": ".*esbuild watch mode started.*",
+          "endsPattern": ".*"
+        },
+        "pattern": {
+          "regexp": "^(?!.*)$",
+          "file": 1,
+          "location": 2,
+          "message": 3
+        }
+      },
+      "label": "npm: watch"
+    }
+  ]
+}

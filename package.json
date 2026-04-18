@@ -1,0 +1,189 @@
+{
+  "name": "asmr-coach",
+  "displayName": "ASMR Coach",
+  "description": "Proof-of-concept VS Code extension that reacts to coding activity with ASMR coaching using ElevenLabs.",
+  "version": "0.0.1",
+  "publisher": "local",
+  "engines": {
+    "vscode": "^1.90.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "activationEvents": [
+    "onStartupFinished",
+    "onCommand:asmrCoach.toggleEnabled",
+    "onCommand:asmrCoach.toggleMode",
+    "onCommand:asmrCoach.testVoiceLine",
+    "onCommand:asmrCoach.testVoiceLineForceFetch",
+    "onCommand:asmrCoach.showTriggerDebug",
+    "onCommand:asmrCoach.preGenerateVoiceCache",
+    "onCommand:asmrCoach.clearVoiceCache",
+    "onCommand:asmrCoach.showCacheStats"
+  ],
+  "main": "./dist/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "asmrCoach.toggleEnabled",
+        "title": "ASMR Coach: Toggle Enabled"
+      },
+      {
+        "command": "asmrCoach.toggleMode",
+        "title": "ASMR Coach: Toggle Mock/Audio"
+      },
+      {
+        "command": "asmrCoach.testVoiceLine",
+        "title": "ASMR Coach: Test Voice Line"
+      },
+      {
+        "command": "asmrCoach.testVoiceLineForceFetch",
+        "title": "ASMR Coach: Test Voice Line (Force Fetch)"
+      },
+      {
+        "command": "asmrCoach.showTriggerDebug",
+        "title": "ASMR Coach: Show Trigger Debug"
+      },
+      {
+        "command": "asmrCoach.preGenerateVoiceCache",
+        "title": "ASMR Coach: Pre-Generate Voice Cache"
+      },
+      {
+        "command": "asmrCoach.clearVoiceCache",
+        "title": "ASMR Coach: Clear Voice Cache"
+      },
+      {
+        "command": "asmrCoach.showCacheStats",
+        "title": "ASMR Coach: Show Cache Stats"
+      }
+    ],
+    "configuration": {
+      "title": "ASMR Coach",
+      "properties": {
+        "asmrCoach.enabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "Enable or disable ASMR Coach reactions."
+        },
+        "asmrCoach.mode": {
+          "type": "string",
+          "enum": [
+            "mock",
+            "audio"
+          ],
+          "default": "mock",
+          "description": "mock logs lines only; audio calls ElevenLabs and plays sound."
+        },
+        "asmrCoach.apiKey": {
+          "type": "string",
+          "default": "",
+          "description": "ElevenLabs API key (used in audio mode)."
+        },
+        "asmrCoach.longLineThreshold": {
+          "type": "number",
+          "default": 100,
+          "minimum": 40,
+          "description": "Line length threshold that triggers long-line praise."
+        },
+        "asmrCoach.minSecondsBetweenMessages": {
+          "type": "number",
+          "default": 45,
+          "minimum": 1,
+          "description": "Global anti-spam gap between messages."
+        },
+        "asmrCoach.longLineCooldownSeconds": {
+          "type": "number",
+          "default": 180,
+          "minimum": 1,
+          "description": "Cooldown for long-line praise trigger."
+        },
+        "asmrCoach.idleAfterSeconds": {
+          "type": "number",
+          "default": 300,
+          "minimum": 3,
+          "description": "Seconds of no typing before idle nudge trigger."
+        },
+        "asmrCoach.idleCooldownSeconds": {
+          "type": "number",
+          "default": 240,
+          "minimum": 1,
+          "description": "Cooldown for idle nudge trigger."
+        },
+        "asmrCoach.sustainedWindowSeconds": {
+          "type": "number",
+          "default": 120,
+          "minimum": 5,
+          "description": "Window for sustained typing detection."
+        },
+        "asmrCoach.sustainedEditsThreshold": {
+          "type": "number",
+          "default": 80,
+          "minimum": 3,
+          "description": "Edits required inside sustained window."
+        },
+        "asmrCoach.sustainedCooldownSeconds": {
+          "type": "number",
+          "default": 300,
+          "minimum": 1,
+          "description": "Cooldown for sustained typing trigger."
+        },
+        "asmrCoach.burstWindowSeconds": {
+          "type": "number",
+          "default": 10,
+          "minimum": 1,
+          "description": "Window for burst typing detection."
+        },
+        "asmrCoach.burstEditsThreshold": {
+          "type": "number",
+          "default": 18,
+          "minimum": 2,
+          "description": "Edits required inside burst window."
+        },
+        "asmrCoach.burstCooldownSeconds": {
+          "type": "number",
+          "default": 120,
+          "minimum": 1,
+          "description": "Cooldown for burst typing trigger."
+        },
+        "asmrCoach.debugLogs": {
+          "type": "boolean",
+          "default": true,
+          "description": "Show trigger and playback debug logs in output channel."
+        },
+        "asmrCoach.usePreGeneratedAudio": {
+          "type": "boolean",
+          "default": true,
+          "description": "Use cached pre-generated audio clips first in audio mode."
+        },
+        "asmrCoach.preGenerateOnStartup": {
+          "type": "boolean",
+          "default": false,
+          "description": "Generate all script lines into cache when extension starts (audio mode only)."
+        },
+        "asmrCoach.voicePersona": {
+          "type": "string",
+          "enum": [
+            "female",
+            "male",
+            "mixed"
+          ],
+          "default": "female",
+          "description": "Voice persona routing: female-only, male-only, or mixed trigger-based selection."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "build": "node esbuild.mjs",
+    "watch": "node esbuild.mjs --watch",
+    "package:vsix": "npx @vscode/vsce package -o asmr-coach.vsix",
+    "vscode:prepublish": "npm run build"
+  },
+  "devDependencies": {
+    "@vscode/vsce": "^3.6.1",
+    "@types/node": "^20.17.43",
+    "@types/vscode": "^1.90.0",
+    "esbuild": "^0.25.4",
+    "typescript": "^5.8.3"
+  }
+}
