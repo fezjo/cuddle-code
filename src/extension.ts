@@ -1,12 +1,14 @@
 import * as vscode from "vscode";
-import { getConfig, toggleEnabled, toggleMode } from "./config";
+import { getConfig, toggleAudioKeepAlive, toggleEnabled, toggleMode } from "./config";
 import { allScriptLines, getScriptBankHealth, initializeScriptBank, linesFor, pickLine } from "./content/scriptBank";
 import { generateSandyLine } from "./llm/openaiClient";
+import { LogThrottle } from "./telemetry/logThrottle";
 import { TriggerScheduler } from "./telemetry/scheduler";
 import { TypingTracker } from "./telemetry/typingTracker";
 import { CoachConfig, Persona, TriggerPayload, TriggerType } from "./types";
 import { ElevenLabsApiError, synthesizeWithElevenLabs } from "./voice/elevenlabsClient";
 import { AudioCache } from "./voice/cache";
+import { AudioKeepAlive } from "./voice/keepAlive";
 import { playMp3Buffer } from "./voice/player";
 
 const TEST_SUCCESS_PATTERNS = [/\b(\d+)\s+passed\b/i, /\btest result:\s*ok\b/i, /\bpass(?:ing)?\b/i, /\bok\b/i];
@@ -20,7 +22,9 @@ export function activate(context: vscode.ExtensionContext): void {
   let config = getConfig();
   let responseQueue: Promise<void> = Promise.resolve();
   const cache = new AudioCache(context, output);
+  const keepAlive = new AudioKeepAlive(output);
   const scheduler = new TriggerScheduler(config.pacingMode);
+  const decisionLogThrottle = new LogThrottle();
   const terminalOutput = new WeakMap<vscode.TerminalShellExecution, string>();
 
   const tracker = new TypingTracker({
@@ -36,7 +40,9 @@ export function activate(context: vscode.ExtensionContext): void {
         });
     }
   });
+  keepAlive.update(config.enabled && config.mode === "audio" && config.audioKeepAlive);
   context.subscriptions.push({ dispose: () => tracker.dispose() });
+  context.subscriptions.push({ dispose: () => keepAlive.dispose() });
 
   context.subscriptions.push(
     vscode.workspace.onDidChangeConfiguration((e) => {
@@ -47,6 +53,7 @@ export function activate(context: vscode.ExtensionContext): void {
         output.appendLine(
           `[CUDDLE] Config updated: mode=${config.mode} enabled=${config.enabled} pacingMode=${config.pacingMode}`
         );
+        keepAlive.update(config.enabled && config.mode === "audio" && config.audioKeepAlive);
       }
     })
   );
@@ -57,7 +64,7 @@ export function activate(context: vscode.ExtensionContext): void {
       if (!editor || editor.document.uri.toString() !== e.document.uri.toString()) {
         return;
       }
-      tracker.recordEdit(e, editor);
+      tracker.recordEdit(e);
       const line = editor.document.lineAt(editor.selection.active.line).text;
       tracker.onFunctionFinished(line);
     })
@@ -105,6 +112,13 @@ export function activate(context: vscode.ExtensionContext): void {
     vscode.commands.registerCommand("cuddleCode.toggleMode", async () => {
       const next = await toggleMode();
       vscode.window.showInformationMessage(`Cuddle Code mode: ${next}.`);
+    })
+  );
+
+  context.subscriptions.push(
+    vscode.commands.registerCommand("cuddleCode.toggleAudioKeepAlive", async () => {
+      const next = await toggleAudioKeepAlive();
+      vscode.window.showInformationMessage(`Cuddle Code audio keepalive: ${next ? "enabled" : "disabled"}.`);
     })
   );
 
@@ -309,9 +323,12 @@ export function activate(context: vscode.ExtensionContext): void {
 
     const decision = scheduler.allow(event.trigger, Date.now(), force || Boolean(event.forceBypassScheduler));
     if (!decision.allowed) {
-      out.appendLine(
-        `[CUDDLE] Trigger skipped: trigger=${event.trigger} confidence=${event.confidence} reason=${decision.reason} mode=${decision.mode}`
-      );
+      const canLog = decisionLogThrottle.shouldLog(`skip:${event.trigger}:${decision.reason ?? "unknown"}`, Date.now());
+      if (canLog) {
+        out.appendLine(
+          `[CUDDLE] Trigger skipped: trigger=${event.trigger} confidence=${event.confidence} reason=${decision.reason} mode=${decision.mode}`
+        );
+      }
       return;
     }
 

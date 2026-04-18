@@ -57,3 +57,5 @@ This update records every fix request from the product owner, including items be
 ## Notes
 
 - Because config namespace moved from `asmrCoach.*` to `cuddleCode.*`, existing user settings may need migration/manual copy in local VS Code settings.
+- Audio start clipping (missing first syllables) was traced to headset/soundcard power-saving wake behavior, not `ffplay` or extension caching logic. Keep this as first troubleshooting check for future playback-cutoff reports.
+- Added optional `cuddleCode.audioKeepAlive` setting to emit imperceptible pulses every second (via ffplay) to keep audio path awake when needed.

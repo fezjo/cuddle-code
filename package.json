@@ -14,6 +14,7 @@
     "onStartupFinished",
     "onCommand:cuddleCode.toggleEnabled",
     "onCommand:cuddleCode.toggleMode",
+    "onCommand:cuddleCode.toggleAudioKeepAlive",
     "onCommand:cuddleCode.testVoiceLine",
     "onCommand:cuddleCode.testVoiceLineForceFetch",
     "onCommand:cuddleCode.showTriggerDebug",
@@ -33,6 +34,10 @@
       {
         "command": "cuddleCode.toggleMode",
         "title": "Cuddle Code: Toggle Mock/Audio"
+      },
+      {
+        "command": "cuddleCode.toggleAudioKeepAlive",
+        "title": "Cuddle Code: Toggle Audio KeepAlive"
       },
       {
         "command": "cuddleCode.testVoiceLine",
@@ -81,7 +86,7 @@
             "mock",
             "audio"
           ],
-          "default": "mock",
+          "default": "audio",
           "description": "mock logs lines only; audio calls ElevenLabs and plays sound."
         },
         "cuddleCode.apiKey": {
@@ -131,6 +136,12 @@
           "minimum": 3,
           "description": "Edits required inside sustained window."
         },
+        "cuddleCode.burstWpmThreshold": {
+          "type": "number",
+          "default": 45,
+          "minimum": 10,
+          "description": "Approximate typing WPM threshold used to derive burstTyping trigger sensitivity."
+        },
         "cuddleCode.sustainedCooldownSeconds": {
           "type": "number",
           "default": 300,
@@ -160,6 +171,11 @@
           "default": true,
           "description": "Show trigger and playback debug logs in output channel."
         },
+        "cuddleCode.audioKeepAlive": {
+          "type": "boolean",
+          "default": true,
+          "description": "Emit tiny periodic audio pulses to keep audio hardware awake and reduce clipped starts."
+        },
         "cuddleCode.usePreGeneratedAudio": {
           "type": "boolean",
           "default": true,
@@ -187,7 +203,7 @@
             "demo",
             "debug"
           ],
-          "default": "normal",
+          "default": "demo",
           "description": "Cadence profile for scheduler timing multipliers (normal, demo, debug)."
         },
         "cuddleCode.llmApiKey": {

@@ -9,6 +9,7 @@ export type TriggerType =
   | "sustainedTyping"
   | "longLine"
   | "minorRefactor"
+  | "largeRefactor"
   | "errorAppears"
   | "errorFixed"
   | "fileSaved"
@@ -43,11 +44,13 @@ export interface CoachConfig {
   idleCooldownSeconds: number;
   sustainedWindowSeconds: number;
   sustainedEditsThreshold: number;
+  burstWpmThreshold: number;
   sustainedCooldownSeconds: number;
   burstWindowSeconds: number;
   burstEditsThreshold: number;
   burstCooldownSeconds: number;
   debugLogs: boolean;
+  audioKeepAlive: boolean;
   usePreGeneratedAudio: boolean;
   preGenerateOnStartup: boolean;
   voicePersona: VoicePersonaMode;

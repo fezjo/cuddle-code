@@ -31,12 +31,13 @@ export class TriggerScheduler {
   }
 
   public updateMode(mode: PacingMode): void {
+    this.regenTokens(Date.now());
     this.mode = mode;
   }
 
   public allow(trigger: TriggerType, now = Date.now(), force = false): TriggerDecision {
     if (force) {
-      this.onFire(trigger, now, true);
+      this.onFire(trigger, now, false);
       return { allowed: true, mode: this.mode };
     }
 
@@ -154,6 +155,7 @@ function triggerCooldownSeconds(trigger: TriggerType): number {
     case "sustainedTyping":
     case "longLine":
     case "minorRefactor":
+    case "largeRefactor":
     case "errorAppears":
     case "formatDocument":
     case "deletingCode":

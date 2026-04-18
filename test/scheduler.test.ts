@@ -46,3 +46,29 @@ test("pacing modes differ by multiplier and timing", () => {
   assert.equal(demo.allow("minorRefactor", after70s).allowed, true);
   assert.equal(debug.allow("minorRefactor", after70s).allowed, true);
 });
+
+test("forced scheduler allow bypasses gating but not cluster lockout side effects", () => {
+  const scheduler = new TriggerScheduler("normal");
+  const start = 4_000_000;
+
+  const first = scheduler.allow("errorFixed", start, true);
+  assert.equal(first.allowed, true);
+
+  const second = scheduler.allow("testsPassing", start + 5_000, true);
+  assert.equal(second.allowed, true);
+
+  const third = scheduler.allow("gitCommit", start + 10_000);
+  assert.equal(third.allowed, true);
+});
+
+test("mode updates preserve token continuity", () => {
+  const scheduler = new TriggerScheduler("normal");
+  const start = 5_000_000;
+
+  assert.equal(scheduler.allow("burstTyping", start).allowed, true);
+  assert.equal(scheduler.allow("minorRefactor", start + 5_000).allowed, false);
+
+  scheduler.updateMode("debug");
+  const healthAfterModeSwitch = scheduler.getHealth();
+  assert.ok(healthAfterModeSwitch.tokens >= 1);
+});

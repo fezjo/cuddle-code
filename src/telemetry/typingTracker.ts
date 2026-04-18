@@ -1,18 +1,22 @@
 import * as vscode from "vscode";
 import { CoachConfig, TriggerConfidence, TriggerPayload, TriggerType } from "../types";
 import {
+  detectDiagnosticTransitions,
   detectCommentInsertion,
-  detectRefactorishRenaming,
+  detectRefactorSignal,
   detectSandyMention,
   summarizeChanges
 } from "./detectors";
+import { SingleLineEditSignal } from "./singleLineSignal";
 
 type TriggerListener = (event: TriggerPayload) => void;
 
 export class TypingTracker {
-  private static readonly CURSOR_NAV_MIN_GAP_MS = 12000;
+  private static readonly CURSOR_NAV_MIN_GAP_MS = 5000;
+  private static readonly CURSOR_NAV_REQUIRED_SPAN_MS = 15000;
+  private static readonly CURSOR_NAV_REQUIRED_BUCKETS = 12;
   private readonly listener: TriggerListener;
-  private readonly output: vscode.OutputChannel;
+  private readonly singleLineSignal = new SingleLineEditSignal();
   private config: CoachConfig;
   private readonly editTimestamps: number[] = [];
   private idleShortTimer: NodeJS.Timeout | undefined;
@@ -21,13 +25,16 @@ export class TypingTracker {
   private lateNightTimer: NodeJS.Timeout | undefined;
   private disposed = false;
   private trackingPaused = false;
-  private lastEditByDoc = new Map<string, { line: number; text: string; at: number }>();
+  private readonly diagnosticsByUri = new Map<string, boolean>();
+  private readonly fileSwitchTimestamps: number[] = [];
+  private readonly cursorMoveBuckets = new Map<number, true>();
+  private lastEditAt = 0;
   private lastCursorNavAt = 0;
   private lastCursorSignature = "";
 
   constructor(args: { config: CoachConfig; output: vscode.OutputChannel; onTrigger: TriggerListener }) {
     this.config = args.config;
-    this.output = args.output;
+    void args.output;
     this.listener = args.onTrigger;
     this.trackingPaused = !isTrackableEditor(vscode.window.activeTextEditor);
     this.scheduleIdleTimers();
@@ -39,7 +46,7 @@ export class TypingTracker {
     this.scheduleIdleTimers();
   }
 
-  public recordEdit(event: vscode.TextDocumentChangeEvent, editor: vscode.TextEditor): void {
+  public recordEdit(event: vscode.TextDocumentChangeEvent): void {
     if (!this.config.enabled) {
       return;
     }
@@ -48,12 +55,18 @@ export class TypingTracker {
     }
 
     const now = Date.now();
+    this.lastEditAt = now;
+    this.cursorMoveBuckets.clear();
     this.editTimestamps.push(now);
     this.trimOld(now);
     this.scheduleIdleTimers();
 
-    const burstCount = this.countInWindow(now, 7000);
-    if (burstCount >= 14) {
+    const burstWindowMs = Math.max(1000, this.config.burstWindowSeconds * 1000);
+    const burstCount = this.countInWindow(now, burstWindowMs);
+    const charsPerWord = 5;
+    const burstThresholdFromWpm = Math.round((this.config.burstWpmThreshold * charsPerWord * this.config.burstWindowSeconds) / 60);
+    const burstThreshold = Math.max(12, this.config.burstEditsThreshold, burstThresholdFromWpm);
+    if (burstCount >= burstThreshold) {
       this.fire("burstTyping", "high", `burstCount=${burstCount}`);
     }
 
@@ -80,7 +93,7 @@ export class TypingTracker {
       this.fire("deletingCode", "high", `deletedChars=${summary.deletedChars}`);
     }
     if (summary.isSingleLineEdit) {
-      this.fire("singleLineEdit", "medium", `line=${summary.singleLine}`);
+      this.singleLineSignal.noteSingleLineEdit(event.document.uri.toString(), summary.singleLine, now);
     }
     if (summary.looksLikeAutocomplete) {
       this.fire("autocompleteAccepted", "high", `insertedChars=${summary.insertedChars}`);
@@ -104,14 +117,10 @@ export class TypingTracker {
       this.fire("addingComments", "medium", `language=${languageId}`);
     }
 
-    const refactorish = detectRefactorishRenaming(
-      event.document.lineAt(editor.selection.active.line).text,
-      editor.selection.active.line,
-      now,
-      event.document.uri.toString(),
-      this.lastEditByDoc
-    );
-    if (refactorish) {
+    const refactor = detectRefactorSignal(event.contentChanges);
+    if (refactor.large) {
+      this.fire("largeRefactor", "high", `lines=${refactor.touchedLines}`);
+    } else if (refactor.minor) {
       this.fire("minorRefactor", "medium", "rename-pattern");
     }
   }
@@ -140,7 +149,14 @@ export class TypingTracker {
 
     this.trackingPaused = false;
     this.scheduleIdleTimers();
-    this.fire("switchingFiles", "high", `file=${editor.document.uri.fsPath}`);
+
+    const now = Date.now();
+    this.fileSwitchTimestamps.push(now);
+    this.trimTimestamps(this.fileSwitchTimestamps, now, 20_000);
+    if (this.fileSwitchTimestamps.length >= 3) {
+      this.fire("switchingFiles", "high", `switches=${this.fileSwitchTimestamps.length}`);
+      this.fileSwitchTimestamps.length = 0;
+    }
   }
 
   public onSelectionChanged(event: vscode.TextEditorSelectionChangeEvent): void {
@@ -165,7 +181,28 @@ export class TypingTracker {
       return;
     }
 
+    const docKey = event.textEditor.document.uri.toString();
+    const maturedSingleLine = this.singleLineSignal.noteCursor(docKey, pos.line, now);
+    if (maturedSingleLine) {
+      this.fire("singleLineEdit", "medium", `line=${pos.line}`);
+    }
+
+    if (now - this.lastEditAt < TypingTracker.CURSOR_NAV_REQUIRED_SPAN_MS) {
+      this.lastCursorSignature = signature;
+      this.cursorMoveBuckets.clear();
+      return;
+    }
+
     if (now - this.lastCursorNavAt < TypingTracker.CURSOR_NAV_MIN_GAP_MS) {
+      this.lastCursorSignature = signature;
+      return;
+    }
+
+    const secondBucket = Math.floor(now / 1000);
+    this.cursorMoveBuckets.set(secondBucket, true);
+    this.trimCursorBuckets(now);
+    const movingForAWhile = this.cursorMoveBuckets.size >= TypingTracker.CURSOR_NAV_REQUIRED_BUCKETS;
+    if (!movingForAWhile) {
       this.lastCursorSignature = signature;
       return;
     }
@@ -173,6 +210,7 @@ export class TypingTracker {
     this.lastCursorSignature = signature;
     this.lastCursorNavAt = now;
     this.fire("cursorNavigation", "high", "selection-change");
+    this.cursorMoveBuckets.clear();
   }
 
   public onDiagnosticsChanged(changedUris: readonly vscode.Uri[]): void {
@@ -183,22 +221,21 @@ export class TypingTracker {
       return;
     }
 
-    let appears = false;
-    let fixed = false;
-    for (const uri of changedUris) {
-      const diagnostics = vscode.languages.getDiagnostics(uri);
-      const hasError = diagnostics.some((d) => d.severity === vscode.DiagnosticSeverity.Error);
-      if (hasError) {
-        appears = true;
-      } else {
-        fixed = true;
-      }
-    }
+    const transitions = detectDiagnosticTransitions(
+      changedUris.map((uri) => {
+        const diagnostics = vscode.languages.getDiagnostics(uri);
+        return {
+          key: uri.toString(),
+          hasError: diagnostics.some((d) => d.severity === vscode.DiagnosticSeverity.Error)
+        };
+      }),
+      this.diagnosticsByUri
+    );
 
-    if (appears) {
+    if (transitions.appears) {
       this.fire("errorAppears", "high", "diagnostic-error-present");
     }
-    if (fixed) {
+    if (transitions.fixed) {
       this.fire("errorFixed", "high", "diagnostic-no-error");
     }
   }
@@ -238,14 +275,8 @@ export class TypingTracker {
   }
 
   public onFunctionFinished(lineText: string): void {
-    if (!this.config.enabled) {
-      return;
-    }
-
-    const t = lineText.trim();
-    if (t.endsWith("}") || t.endsWith(":") || t.endsWith("end")) {
-      this.fire("functionFinished", "high", "line-end-pattern");
-    }
+    void lineText;
+    return;
   }
 
   public dispose(): void {
@@ -304,6 +335,21 @@ export class TypingTracker {
     const keepMs = 120000;
     while (this.editTimestamps.length > 0 && now - this.editTimestamps[0] > keepMs) {
       this.editTimestamps.shift();
+    }
+  }
+
+  private trimTimestamps(values: number[], now: number, keepMs: number): void {
+    while (values.length > 0 && now - values[0] > keepMs) {
+      values.shift();
+    }
+  }
+
+  private trimCursorBuckets(now: number): void {
+    const earliestBucket = Math.floor((now - TypingTracker.CURSOR_NAV_REQUIRED_SPAN_MS) / 1000);
+    for (const bucket of this.cursorMoveBuckets.keys()) {
+      if (bucket < earliestBucket) {
+        this.cursorMoveBuckets.delete(bucket);
+      }
     }
   }
 

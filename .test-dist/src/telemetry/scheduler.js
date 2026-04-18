@@ -27,11 +27,12 @@ class TriggerScheduler {
         this.mode = mode;
     }
     updateMode(mode) {
+        this.regenTokens(Date.now());
         this.mode = mode;
     }
     allow(trigger, now = Date.now(), force = false) {
         if (force) {
-            this.onFire(trigger, now, true);
+            this.onFire(trigger, now, false);
             return { allowed: true, mode: this.mode };
         }
         this.regenTokens(now);
@@ -130,6 +131,7 @@ function triggerCooldownSeconds(trigger) {
         case "sustainedTyping":
         case "longLine":
         case "minorRefactor":
+        case "largeRefactor":
         case "errorAppears":
         case "formatDocument":
         case "deletingCode":

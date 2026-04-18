@@ -55,16 +55,18 @@ Or inside VS Code: Extensions view -> `...` menu -> `Install from VSIX...`.
 - `cuddleCode.voicePersona` (`female` default, `male`, or `mixed`)
 - `cuddleCode.pacingMode` (`normal`, `demo`, `debug`)
 - `cuddleCode.llmApiKey` (OpenAI key for Sandy mention replies)
+- `cuddleCode.audioKeepAlive` (optional tiny periodic pulse to keep audio hardware awake)
 - `cuddleCode.usePreGeneratedAudio`
 - `cuddleCode.preGenerateOnStartup`
 - Trigger thresholds and cooldowns use longer defaults for less frequent interruptions.
 
-Current defaults favor longer, less frequent interruptions (production-like pacing).
+Current defaults favor audible demo behavior (audio mode + demo pacing), with keepalive enabled to reduce clipped starts on power-saving audio devices.
 
 Open command palette and use:
 
 - `Cuddle Code: Toggle Enabled`
 - `Cuddle Code: Toggle Mock/Audio`
+- `Cuddle Code: Toggle Audio KeepAlive`
 - `Cuddle Code: Test Voice Line`
 - `Cuddle Code: Test Voice Line (Force Fetch)`
 - `Cuddle Code: Show Trigger Debug`

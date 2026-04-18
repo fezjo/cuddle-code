@@ -40,3 +40,22 @@ const scheduler_1 = require("../src/telemetry/scheduler");
     strict_1.default.equal(demo.allow("minorRefactor", after70s).allowed, true);
     strict_1.default.equal(debug.allow("minorRefactor", after70s).allowed, true);
 });
+(0, node_test_1.default)("forced scheduler allow bypasses gating but not cluster lockout side effects", () => {
+    const scheduler = new scheduler_1.TriggerScheduler("normal");
+    const start = 4_000_000;
+    const first = scheduler.allow("errorFixed", start, true);
+    strict_1.default.equal(first.allowed, true);
+    const second = scheduler.allow("testsPassing", start + 5_000, true);
+    strict_1.default.equal(second.allowed, true);
+    const third = scheduler.allow("gitCommit", start + 10_000);
+    strict_1.default.equal(third.allowed, true);
+});
+(0, node_test_1.default)("mode updates preserve token continuity", () => {
+    const scheduler = new scheduler_1.TriggerScheduler("normal");
+    const start = 5_000_000;
+    strict_1.default.equal(scheduler.allow("burstTyping", start).allowed, true);
+    strict_1.default.equal(scheduler.allow("minorRefactor", start + 5_000).allowed, false);
+    scheduler.updateMode("debug");
+    const healthAfterModeSwitch = scheduler.getHealth();
+    strict_1.default.ok(healthAfterModeSwitch.tokens >= 1);
+});

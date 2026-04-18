@@ -9,7 +9,7 @@ const HEAD_ALIASES: Record<string, TriggerType> = {
   "quick burst": "burstTyping",
   "sustained typing": "sustainedTyping",
   "long line": "longLine",
-  refactor: "minorRefactor",
+  refactor: "largeRefactor",
   "error appears": "errorAppears",
   "error fixed": "errorFixed",
   "file saved": "fileSaved",
@@ -30,7 +30,7 @@ const HEAD_ALIASES: Record<string, TriggerType> = {
   "backspace / delete (very frequent)": "deletingCode",
   "autocomplete / suggestion accepted (happens constantly)": "autocompleteAccepted",
   "quick save (ctrl/cmd + s - extremely frequent)": "fileSaved",
-  "minor refactor / small cleanup (renaming variable, extracting tiny bit, etc.)": "minorRefactor",
+  "minor refactor / small cleanup (renaming variable, extracting tiny bit, etc.)": "largeRefactor",
   "cursor movement / navigation (arrow keys, mouse clicks, jumping around)": "cursorNavigation",
   "format document / auto-format triggered": "formatDocument",
   "paste action": "pasteAction",
@@ -198,6 +198,7 @@ function fallbackScriptBank(): Record<TriggerType, Record<Persona, string[]>> {
     sustainedTyping: { female: ["Steady rhythm. Beautiful focus."], male: ["Steady rhythm. Beautiful focus."] },
     longLine: { female: ["That long line had confidence."], male: ["That long line had confidence."] },
     minorRefactor: { female: ["Cleanups like that feel good."], male: ["Cleanups like that feel good."] },
+    largeRefactor: { female: ["That was a serious refactor pass."], male: ["That was a serious refactor pass."] },
     errorAppears: { female: ["A red flag showed up. You can fix this."], male: ["A red flag showed up. You can fix this."] },
     errorFixed: { female: ["There it is, fixed and clean."], male: ["There it is, fixed and clean."] },
     fileSaved: { female: ["Saved. Work protected."], male: ["Saved. Work protected."] },
@@ -228,6 +229,8 @@ function fallbackTriggerFor(trigger: TriggerType): TriggerType {
     case "idleVeryLong":
       return "idleLong";
     case "singleLineEdit":
+      return "minorRefactor";
+    case "largeRefactor":
       return "minorRefactor";
     case "cursorNavigation":
       return "switchingFiles";
