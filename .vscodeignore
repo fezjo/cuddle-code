@@ -8,6 +8,7 @@ node_modules/**/.cache/**
 test/**
 .vscode/**
 throwaway/**
+voice-bundle/**
 cuddle-code.vsix
 cuddle-code-*.vsix
 NEXT_AGENT_PLAN.md
@@ -15,4 +16,4 @@ PLAN_UPDATE.md
 lines2.md
 dist/**/*.map
 !sandy.png
-!voice-bundle/**
+sandy-original.png
