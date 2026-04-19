@@ -38,15 +38,11 @@ function playbackAttempts(file: string): Array<{ cmd: string; args: string[] }> 
     for (const shell of shellAttempts) {
       attempts.push({
         cmd: shell,
-        args: ["-NoProfile", "-ExecutionPolicy", "Bypass", "-Sta", "-Command", windowsMediaPlayerScript(), file]
+        args: ["-NoProfile", "-ExecutionPolicy", "Bypass", "-Sta", "-Command", windowsMediaPlayerScript(file)]
       });
       attempts.push({
         cmd: shell,
-        args: ["-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", windowsWmPlayerComScript(), file]
-      });
-      attempts.push({
-        cmd: shell,
-        args: ["-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", windowsSoundPlayerScript(), file]
+        args: ["-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", windowsWmPlayerComScript(file)]
       });
     }
 
@@ -64,11 +60,14 @@ function playbackAttempts(file: string): Array<{ cmd: string; args: string[] }> 
   ];
 }
 
-function windowsMediaPlayerScript(): string {
+function psEscape(path: string): string {
+  return path.replaceAll("'", "''");
+}
+
+function windowsMediaPlayerScript(file: string): string {
   return [
     "$ErrorActionPreference = 'Stop'",
-    "$path = $args[0]",
-    "$fullPath = [System.IO.Path]::GetFullPath($path)",
+    `$fullPath = '${psEscape(file)}'`,
     "Add-Type -AssemblyName presentationCore",
     "$player = New-Object System.Windows.Media.MediaPlayer",
     "$player.Open([System.Uri]::new($fullPath, [System.UriKind]::Absolute))",
@@ -86,11 +85,10 @@ function windowsMediaPlayerScript(): string {
   ].join("; ");
 }
 
-function windowsWmPlayerComScript(): string {
+function windowsWmPlayerComScript(file: string): string {
   return [
     "$ErrorActionPreference = 'Stop'",
-    "$path = $args[0]",
-    "$fullPath = [System.IO.Path]::GetFullPath($path)",
+    `$fullPath = '${psEscape(file)}'`,
     "$player = New-Object -ComObject WMPlayer.OCX",
     "$player.settings.volume = 100",
     "$player.URL = $fullPath",
@@ -102,14 +100,6 @@ function windowsWmPlayerComScript(): string {
     "}",
     "$player.controls.stop()",
     "[void][System.Runtime.InteropServices.Marshal]::FinalReleaseComObject($player)"
-  ].join("; ");
-}
-
-function windowsSoundPlayerScript(): string {
-  return [
-    "$ErrorActionPreference = 'Stop'",
-    "$path = $args[0]",
-    "(New-Object Media.SoundPlayer $path).PlaySync()"
   ].join("; ");
 }
 

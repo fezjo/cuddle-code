@@ -1,5 +1,16 @@
 src/**
 tsconfig.json
+tsconfig.test.json
 esbuild.mjs
 *.ts
 node_modules/**/.cache/**
+.test-dist/**
+test/**
+.vscode/**
+throwaway/**
+cuddle-code.vsix
+cuddle-code-*.vsix
+NEXT_AGENT_PLAN.md
+PLAN_UPDATE.md
+lines2.md
+dist/**/*.map
