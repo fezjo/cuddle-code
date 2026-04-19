@@ -6,7 +6,7 @@ const MODE_MULTIPLIER: Record<PacingMode, number> = {
   debug: 0.2
 };
 
-const GLOBAL_MIN_GAP_SECONDS = 95;
+const GLOBAL_MIN_GAP_SECONDS = 80;
 const TOKEN_REGEN_SECONDS = 120;
 const TOKEN_CAP = 2;
 const CLUSTER_LOCKOUT_SECONDS = 300;

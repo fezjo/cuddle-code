@@ -25,6 +25,7 @@ export class AudioCache {
   private loaded = false;
   private bundledIndex: CacheIndex = { version: CACHE_VERSION, entries: [] };
   private bundledLoaded = false;
+  private bundledBaseDir: string | undefined;
   private downloadedBundleIndex: CacheIndex = { version: CACHE_VERSION, entries: [] };
   private downloadedBundleLoaded = false;
 
@@ -261,20 +262,20 @@ export class AudioCache {
     return join(this.audioDir(), file);
   }
 
-  private bundledDir(): string {
-    return join(this.context.extensionPath, "voice-bundle");
+  private bundledDirs(): string[] {
+    return [join(this.context.extensionPath, "voice-bundle"), join(this.context.extensionPath, "voice-bundle-female")];
   }
 
   private downloadedBundleDir(): string {
     return join(this.context.globalStorageUri.fsPath, "voice-bundle");
   }
 
-  private absBundledIndex(): string {
-    return join(this.bundledDir(), "index.json");
+  private absBundledIndex(baseDir: string): string {
+    return join(baseDir, "index.json");
   }
 
-  private absBundledAudioFile(file: string): string {
-    return join(this.bundledDir(), file);
+  private absBundledAudioFile(baseDir: string, file: string): string {
+    return join(baseDir, file);
   }
 
   private absDownloadedBundleIndex(): string {
@@ -320,7 +321,10 @@ export class AudioCache {
       return { indexed: true, blockedReason: hit.blockedReason };
     }
     try {
-      return { indexed: true, audio: await fs.readFile(this.absBundledAudioFile(hit.file)) };
+      return {
+        indexed: true,
+        audio: await fs.readFile(this.absBundledAudioFile(this.bundledBaseDir ?? this.bundledDirs()[0], hit.file))
+      };
     } catch {
       return { indexed: true };
     }
@@ -331,17 +335,24 @@ export class AudioCache {
       return;
     }
 
-    try {
-      const raw = await fs.readFile(this.absBundledIndex(), "utf8");
-      const parsed = JSON.parse(raw) as CacheIndex;
-      if (parsed.version === CACHE_VERSION && Array.isArray(parsed.entries)) {
-        this.bundledIndex = parsed;
-        this.output.appendLine(`[CUDDLE] Bundled voice cache loaded: entries=${parsed.entries.length}`);
+    for (const dir of this.bundledDirs()) {
+      try {
+        const raw = await fs.readFile(this.absBundledIndex(dir), "utf8");
+        const parsed = JSON.parse(raw) as CacheIndex;
+        if (parsed.version === CACHE_VERSION && Array.isArray(parsed.entries)) {
+          this.bundledIndex = parsed;
+          this.bundledBaseDir = dir;
+          this.output.appendLine(`[CUDDLE] Bundled voice cache loaded: dir=${dir} entries=${parsed.entries.length}`);
+          this.bundledLoaded = true;
+          return;
+        }
+      } catch {
+        continue;
       }
-    } catch {
-      this.bundledIndex = { version: CACHE_VERSION, entries: [] };
     }
 
+    this.bundledBaseDir = undefined;
+    this.bundledIndex = { version: CACHE_VERSION, entries: [] };
     this.bundledLoaded = true;
   }
 

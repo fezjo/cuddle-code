@@ -3,7 +3,7 @@
   "displayName": "Cuddle Code",
   "icon": "sandy.png",
   "description": "VS Code extension that reacts to coding activity with supportive voice coaching using ElevenLabs.",
-  "version": "0.0.3",
+  "version": "0.1.0",
   "publisher": "overfit",
   "license": "UNLICENSED",
   "repository": {
