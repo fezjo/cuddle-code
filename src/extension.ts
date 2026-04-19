@@ -26,6 +26,7 @@ export function activate(context: vscode.ExtensionContext): void {
   const scheduler = new TriggerScheduler(config.pacingMode);
   const decisionLogThrottle = new LogThrottle();
   const terminalOutput = new WeakMap<vscode.TerminalShellExecution, string>();
+  let lastGitCommitTriggerAt = 0;
 
   const tracker = new TypingTracker({
     config,
@@ -77,21 +78,38 @@ export function activate(context: vscode.ExtensionContext): void {
 
   context.subscriptions.push(
     vscode.window.onDidStartTerminalShellExecution((event) => {
-      void captureTerminalOutput(event.execution, terminalOutput);
+      const command = event.execution.commandLine.value.toLowerCase();
+      void captureTerminalOutput(event.execution, terminalOutput, async (outText) => {
+        if (!isGitCommitCommand(command)) {
+          return;
+        }
+        const successByOutput = isGitCommitSuccessOutput(outText);
+        const failureByOutput = isGitCommitFailureOutput(outText);
+        if (successByOutput && !failureByOutput) {
+          maybeEmitGitCommit("terminal-stream");
+        }
+      });
     })
   );
   context.subscriptions.push(
     vscode.window.onDidEndTerminalShellExecution((event) => {
       const command = event.execution.commandLine.value.toLowerCase();
-      if (event.exitCode !== 0) {
-        return;
-      }
-      if (/\bgit\s+commit\b/.test(command)) {
-        tracker.onTerminalCommandEnd(event);
+      const outText = terminalOutput.get(event.execution) ?? "";
+      if (isGitCommitCommand(command)) {
+        const successByOutput = isGitCommitSuccessOutput(outText);
+        const failureByOutput = isGitCommitFailureOutput(outText);
+        const exitCode = event.exitCode;
+        const shouldEmit = (exitCode === 0 || (exitCode === undefined && successByOutput)) && !failureByOutput;
+
+        if (shouldEmit) {
+          maybeEmitGitCommit("terminal-end");
+        }
         return;
       }
       if (isTestCommand(command)) {
-        const outText = terminalOutput.get(event.execution) ?? "";
+        if (event.exitCode !== 0) {
+          return;
+        }
         if (TEST_SUCCESS_PATTERNS.some((p) => p.test(outText))) {
           tracker.onTerminalCommandEnd(event);
         } else {
@@ -100,6 +118,15 @@ export function activate(context: vscode.ExtensionContext): void {
       }
     })
   );
+
+  function maybeEmitGitCommit(source: string): void {
+    const now = Date.now();
+    if (now - lastGitCommitTriggerAt < 4000) {
+      return;
+    }
+    lastGitCommitTriggerAt = now;
+    tracker.onGitCommitDetected(source);
+  }
 
   context.subscriptions.push(
     vscode.commands.registerCommand("cuddleCode.toggleEnabled", async () => {
@@ -586,7 +613,8 @@ function fallbackPersonaOrder(trigger: TriggerType, current: CoachConfig): Perso
 
 async function captureTerminalOutput(
   execution: vscode.TerminalShellExecution,
-  store: WeakMap<vscode.TerminalShellExecution, string>
+  store: WeakMap<vscode.TerminalShellExecution, string>,
+  onComplete?: (output: string) => void | Promise<void>
 ): Promise<void> {
   let chunks = "";
   try {
@@ -600,9 +628,37 @@ async function captureTerminalOutput(
   } catch {
     return;
   }
-  store.set(execution, chunks.toLowerCase());
+  const lowered = chunks.toLowerCase();
+  store.set(execution, lowered);
+  if (onComplete) {
+    await onComplete(lowered);
+  }
 }
 
 function isTestCommand(command: string): boolean {
   return /\b(npm\s+test|pnpm\s+test|yarn\s+test|pytest|cargo\s+test|go\s+test|ctest|jest|vitest|mocha)\b/.test(command);
+}
+
+function isGitCommitCommand(text: string): boolean {
+  return /\bgit\s+commit\b/.test(text);
+}
+
+function isGitCommitSuccessOutput(text: string): boolean {
+  return (
+    /\[[^\]]+\s+[0-9a-f]{6,}\]/.test(text) ||
+    /\d+\s+file(?:s)?\s+changed/.test(text) ||
+    /\screate mode\s+\d+\s+/.test(text) ||
+    /\sdelete mode\s+\d+\s+/.test(text) ||
+    /\srename\s+.+=>.+\(/.test(text)
+  );
+}
+
+function isGitCommitFailureOutput(text: string): boolean {
+  return (
+    /\bnothing to commit\b/.test(text) ||
+    /\baborting commit\b/.test(text) ||
+    /\bcommit failed\b/.test(text) ||
+    /\bpre-commit hook exited with code\b/.test(text) ||
+    /\bfatal:\s+not a git repository\b/.test(text)
+  );
 }

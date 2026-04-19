@@ -33,16 +33,24 @@ async function playFile(file: string): Promise<void> {
 
 function playbackAttempts(file: string): Array<{ cmd: string; args: string[] }> {
   if (process.platform === "win32") {
-    return [
-      {
-        cmd: "powershell",
+    const shellAttempts = ["powershell", "powershell.exe", "pwsh", "pwsh.exe"];
+    const attempts: Array<{ cmd: string; args: string[] }> = [];
+    for (const shell of shellAttempts) {
+      attempts.push({
+        cmd: shell,
         args: ["-NoProfile", "-ExecutionPolicy", "Bypass", "-Sta", "-Command", windowsMediaPlayerScript(), file]
-      },
-      {
-        cmd: "powershell",
+      });
+      attempts.push({
+        cmd: shell,
+        args: ["-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", windowsWmPlayerComScript(), file]
+      });
+      attempts.push({
+        cmd: shell,
         args: ["-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", windowsSoundPlayerScript(), file]
-      }
-    ];
+      });
+    }
+
+    return attempts;
   }
 
   return [
@@ -60,9 +68,10 @@ function windowsMediaPlayerScript(): string {
   return [
     "$ErrorActionPreference = 'Stop'",
     "$path = $args[0]",
+    "$fullPath = [System.IO.Path]::GetFullPath($path)",
     "Add-Type -AssemblyName presentationCore",
     "$player = New-Object System.Windows.Media.MediaPlayer",
-    "$player.Open([System.Uri]::new($path))",
+    "$player.Open([System.Uri]::new($fullPath, [System.UriKind]::Absolute))",
     "$waitUntil = [DateTime]::UtcNow.AddSeconds(5)",
     "while (-not $player.NaturalDuration.HasTimeSpan -and [DateTime]::UtcNow -lt $waitUntil) { Start-Sleep -Milliseconds 50 }",
     "$player.Volume = 1.0",
@@ -74,6 +83,25 @@ function windowsMediaPlayerScript(): string {
     "  Start-Sleep -Milliseconds 1500",
     "}",
     "$player.Close()"
+  ].join("; ");
+}
+
+function windowsWmPlayerComScript(): string {
+  return [
+    "$ErrorActionPreference = 'Stop'",
+    "$path = $args[0]",
+    "$fullPath = [System.IO.Path]::GetFullPath($path)",
+    "$player = New-Object -ComObject WMPlayer.OCX",
+    "$player.settings.volume = 100",
+    "$player.URL = $fullPath",
+    "$player.controls.play()",
+    "$waitUntil = [DateTime]::UtcNow.AddSeconds(30)",
+    "while ([DateTime]::UtcNow -lt $waitUntil) {",
+    "  if ($player.playState -eq 1 -or $player.playState -eq 8) { break }",
+    "  Start-Sleep -Milliseconds 100",
+    "}",
+    "$player.controls.stop()",
+    "[void][System.Runtime.InteropServices.Marshal]::FinalReleaseComObject($player)"
   ].join("; ");
 }
 

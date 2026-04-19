@@ -114,13 +114,13 @@
         },
         "cuddleCode.idleAfterSeconds": {
           "type": "number",
-          "default": 300,
+          "default": 120,
           "minimum": 3,
           "description": "Seconds of no typing before idle nudge trigger."
         },
         "cuddleCode.idleCooldownSeconds": {
           "type": "number",
-          "default": 240,
+          "default": 180,
           "minimum": 1,
           "description": "Cooldown for idle nudge trigger."
         },

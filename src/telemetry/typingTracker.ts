@@ -301,14 +301,16 @@ export class TypingTracker {
       return;
     }
 
-    if (isGitCommitSuccess(cmd)) {
-      this.fire("gitCommit", "strict", "terminal-success", { commandLine: cmd });
-      return;
-    }
-
     if (isTestCommand(cmd)) {
       this.fire("testsPassing", "strict", "terminal-success", { commandLine: cmd });
     }
+  }
+
+  public onGitCommitDetected(source: string): void {
+    if (!this.config.enabled) {
+      return;
+    }
+    this.fire("gitCommit", "strict", source, { forceBypassScheduler: true });
   }
 
   public onAutocompleteAccepted(): void {
@@ -348,11 +350,11 @@ export class TypingTracker {
       return;
     }
 
-    this.idleShortTimer = setTimeout(() => this.fire("idleShort", "high", "idle-short"), 15000);
+    this.idleShortTimer = setTimeout(() => this.fire("idleShort", "high", "idle-short"), 10000);
     this.idleLongTimer = setTimeout(() => this.fire("idleLong", "high", "idle-long"), this.config.idleAfterSeconds * 1000);
     this.idleVeryLongTimer = setTimeout(
       () => this.fire("idleVeryLong", "high", "idle-very-long"),
-      Math.max(this.config.idleAfterSeconds + 180, 240) * 1000
+      Math.max(this.config.idleAfterSeconds + 120, 180) * 1000
     );
   }
 
@@ -569,10 +571,6 @@ function longestChangedLineLength(
     }
   }
   return maxLen;
-}
-
-function isGitCommitSuccess(command: string): boolean {
-  return /\bgit\s+commit\b/.test(command);
 }
 
 function isTestCommand(command: string): boolean {
