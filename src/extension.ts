@@ -1,4 +1,5 @@
 import * as vscode from "vscode";
+import { join } from "node:path";
 import { getConfig, toggleAudioKeepAlive, toggleEnabled, toggleMode } from "./config";
 import { allScriptLines, getScriptBankHealth, initializeScriptBank, linesFor, pickLine } from "./content/scriptBank";
 import { generateSandyLine } from "./llm/openaiClient";
@@ -455,6 +456,94 @@ export function activate(context: vscode.ExtensionContext): void {
     })
   );
 
+  context.subscriptions.push(
+    vscode.commands.registerCommand("cuddleCode.exportBundledVoiceCache", async () => {
+      const workspacePath = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+      if (!workspacePath) {
+        vscode.window.showWarningMessage("Cuddle Code: open a workspace folder first to export bundled voice cache.");
+        return;
+      }
+
+      const destination = join(workspacePath, "voice-bundle");
+      const result = await cache.exportBundle(destination);
+      output.appendLine(
+        `[CUDDLE] Exported bundled voice cache: destination=${destination} entries=${result.entries} copiedFiles=${result.copiedFiles}`
+      );
+      vscode.window.showInformationMessage(
+        `Cuddle Code bundled cache exported to voice-bundle (${result.copiedFiles} files).`
+      );
+      output.show(true);
+    })
+  );
+
+  context.subscriptions.push(
+    vscode.commands.registerCommand("cuddleCode.downloadVoiceBundle", async () => {
+      const current = getConfig();
+      const configuredUrl = current.voiceBundleIndexUrl;
+      const inputUrl = await vscode.window.showInputBox({
+        title: "Download Voice Bundle",
+        prompt: "Enter URL to voice-bundle/index.json",
+        placeHolder: "https://github.com/<owner>/<repo>/releases/download/<tag>/voice-bundle/index.json",
+        value: configuredUrl,
+        validateInput: (value) => {
+          const trimmed = value.trim();
+          if (!trimmed) {
+            return "Voice bundle URL is required.";
+          }
+          if (!/^https?:\/\//i.test(trimmed)) {
+            return "URL must start with http:// or https://";
+          }
+          if (!/index\.json(\?.*)?$/i.test(trimmed)) {
+            return "URL should point to voice-bundle/index.json";
+          }
+          return undefined;
+        }
+      });
+      if (!inputUrl) {
+        return;
+      }
+
+      const targetUrl = inputUrl.trim();
+      await vscode.window.withProgress(
+        {
+          location: vscode.ProgressLocation.Notification,
+          title: "Cuddle Code: downloading voice bundle",
+          cancellable: false
+        },
+        async (progress) => {
+          progress.report({ message: "Downloading index..." });
+          const result = await cache.installDownloadedBundle(targetUrl, ({ done, total, file }) => {
+            const increment = total > 0 ? 100 / total : 0;
+            progress.report({ increment, message: `Downloading ${done}/${total}: ${file}` });
+          });
+          output.appendLine(
+            `[CUDDLE] Downloaded voice bundle from ${targetUrl}: entries=${result.entries} files=${result.downloadedFiles}`
+          );
+          vscode.window.showInformationMessage(
+            `Cuddle Code downloaded voice bundle (${result.downloadedFiles} files).`
+          );
+        }
+      );
+    })
+  );
+
+  context.subscriptions.push(
+    vscode.commands.registerCommand("cuddleCode.clearDownloadedVoiceBundle", async () => {
+      const answer = await vscode.window.showWarningMessage(
+        "Remove downloaded voice bundle files? Built-in cache remains unaffected.",
+        { modal: true },
+        "Remove Bundle"
+      );
+      if (answer !== "Remove Bundle") {
+        return;
+      }
+
+      await cache.clearDownloadedBundle();
+      output.appendLine("[CUDDLE] Downloaded voice bundle removed.");
+      vscode.window.showInformationMessage("Cuddle Code downloaded voice bundle removed.");
+    })
+  );
+
   output.appendLine("[CUDDLE] Extension activated.");
   void maybePreGenerateOnStartup();
 
@@ -505,12 +594,6 @@ export function activate(context: vscode.ExtensionContext): void {
       return;
     }
 
-    if (!current.elevenlabsApiKey) {
-      out.appendLine("[CUDDLE] Audio mode set, but elevenlabsApiKey is missing.");
-      vscode.window.showWarningMessage("Cuddle Code: audio mode needs cuddleCode.elevenlabsApiKey");
-      return;
-    }
-
     try {
       let audio;
       if (current.usePreGeneratedAudio && !options?.ignoreCache) {
@@ -536,6 +619,13 @@ export function activate(context: vscode.ExtensionContext): void {
       }
 
       if (!audio) {
+        if (!current.elevenlabsApiKey) {
+          out.appendLine("[CUDDLE] Audio synth skipped: elevenlabsApiKey missing and no cached/bundled clip found.");
+          vscode.window.showWarningMessage(
+            "Cuddle Code: missing audio clip and cuddleCode.elevenlabsApiKey is not set for synthesis."
+          );
+          return;
+        }
         out.appendLine(`[CUDDLE] Synthesizing trigger=${event.trigger} persona=${persona}`);
         try {
           audio = await synthesizeWithElevenLabs({

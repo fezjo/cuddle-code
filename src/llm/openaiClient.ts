@@ -73,20 +73,23 @@ export async function generateSandyLine(args: {
     args.onDebugLog(`[CUDDLE][SANDY][RESPONSE_STATUS] ${res.status}`);
     args.onDebugLog(`[CUDDLE][SANDY][RESPONSE_BODY] ${body}`);
   }
-  if (!res.ok) {
-    throw new Error(`OpenAI error ${res.status}: ${body}`);
-  }
 
   let text = "";
-  try {
-    text = extractResponseText(JSON.parse(body));
-  } catch {
-    text = body.trim();
+  if (!res.ok) {
+    if (args.onDebugLog) {
+      args.onDebugLog("[CUDDLE][SANDY] /responses request failed; will try fallback path.");
+    }
+  } else {
+    try {
+      text = extractResponseText(JSON.parse(body));
+    } catch {
+      text = body.trim();
+    }
   }
 
   if (!text) {
     if (args.onDebugLog) {
-      args.onDebugLog("[CUDDLE][SANDY] No visible text in first response, retrying with minimal reasoning.");
+      args.onDebugLog("[CUDDLE][SANDY] No visible text in /responses result, retrying /responses with stricter prompt.");
     }
     const retry = await fetch(`${baseUrl}/responses`, {
       method: "POST",
@@ -127,6 +130,43 @@ export async function generateSandyLine(args: {
   }
 
   if (!text) {
+    const chatPayload = {
+      model,
+      messages: [
+        { role: "system", content: `${system} Always provide one short final sentence.` },
+        { role: "user", content: `${input}\nReturn one short final sentence now. No analysis.` }
+      ],
+      temperature: 0.7,
+      max_tokens: 140
+    };
+
+    if (args.onDebugLog) {
+      args.onDebugLog(`[CUDDLE][SANDY][CHAT_REQUEST_URL] ${baseUrl}/chat/completions`);
+      args.onDebugLog(`[CUDDLE][SANDY][CHAT_REQUEST_BODY] ${JSON.stringify(chatPayload)}`);
+    }
+
+    const chatRes = await fetch(`${baseUrl}/chat/completions`, {
+      method: "POST",
+      headers,
+      body: JSON.stringify(chatPayload)
+    });
+
+    const chatBody = await chatRes.text();
+    if (args.onDebugLog) {
+      args.onDebugLog(`[CUDDLE][SANDY][CHAT_RESPONSE_STATUS] ${chatRes.status}`);
+      args.onDebugLog(`[CUDDLE][SANDY][CHAT_RESPONSE_BODY] ${chatBody}`);
+    }
+
+    if (chatRes.ok) {
+      try {
+        text = extractResponseText(JSON.parse(chatBody));
+      } catch {
+        text = chatBody.trim();
+      }
+    }
+  }
+
+  if (!text) {
     if (args.onDebugLog) {
       args.onDebugLog("[CUDDLE][SANDY] Parsed response text is empty (reasoning-only response). Using fallback line.");
     }
@@ -161,6 +201,25 @@ function extractResponseText(payload: unknown): string {
     return data.output_text.trim();
   }
 
+  const outputTextObj = data.output_text;
+  if (Array.isArray(outputTextObj)) {
+    const joined = outputTextObj
+      .map((x) => {
+        if (typeof x === "string") {
+          return x;
+        }
+        if (x && typeof x === "object" && typeof (x as Record<string, unknown>).text === "string") {
+          return String((x as Record<string, unknown>).text);
+        }
+        return "";
+      })
+      .join("\n")
+      .trim();
+    if (joined) {
+      return joined;
+    }
+  }
+
   const output = data.output;
   if (Array.isArray(output)) {
     for (const item of output) {
@@ -173,6 +232,9 @@ function extractResponseText(payload: unknown): string {
         const c = chunk as Record<string, unknown>;
         if (typeof c.text === "string" && c.text.trim()) {
           return c.text.trim();
+        }
+        if (typeof c.content === "string" && c.content.trim()) {
+          return c.content.trim();
         }
       }
     }
@@ -195,7 +257,22 @@ function extractResponseText(payload: unknown): string {
         if (typeof c.text === "string" && c.text.trim()) {
           return c.text.trim();
         }
+        if (typeof c.content === "string" && c.content.trim()) {
+          return c.content.trim();
+        }
       }
+    }
+  }
+
+  if (typeof data.response === "object" && data.response) {
+    return extractResponseText(data.response);
+  }
+
+  const message = data.message;
+  if (message && typeof message === "object") {
+    const messageRec = message as Record<string, unknown>;
+    if (typeof messageRec.content === "string" && messageRec.content.trim()) {
+      return messageRec.content.trim();
     }
   }
 
@@ -228,3 +305,7 @@ async function loadSandySystemPrompt(extensionRootPath?: string): Promise<string
     "Always keep it supportive. Tease them. Make them want more."
   ].join(" ");
 }
+
+export const __internal = {
+  extractResponseText
+};

@@ -53,6 +53,7 @@ export interface CoachConfig {
   audioKeepAlive: boolean;
   usePreGeneratedAudio: boolean;
   preGenerateOnStartup: boolean;
+  voiceBundleIndexUrl: string;
   voicePersona: VoicePersonaMode;
   pacingMode: PacingMode;
   llmApiKey: string;

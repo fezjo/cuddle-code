@@ -4,7 +4,7 @@
   "icon": "sandy.png",
   "description": "VS Code extension that reacts to coding activity with supportive voice coaching using ElevenLabs.",
   "version": "0.0.1",
-  "publisher": "local",
+  "publisher": "overfit",
   "license": "UNLICENSED",
   "repository": {
     "type": "git",
@@ -31,6 +31,9 @@
     "onCommand:cuddleCode.preGenerateVoiceCache",
     "onCommand:cuddleCode.clearVoiceCache",
     "onCommand:cuddleCode.showCacheStats",
+    "onCommand:cuddleCode.exportBundledVoiceCache",
+    "onCommand:cuddleCode.downloadVoiceBundle",
+    "onCommand:cuddleCode.clearDownloadedVoiceBundle",
     "onCommand:cuddleCode.showTriggerHealth",
     "onCommand:cuddleCode.simulateTrigger"
   ],
@@ -72,6 +75,18 @@
       {
         "command": "cuddleCode.showCacheStats",
         "title": "Cuddle Code: Show Cache Stats"
+      },
+      {
+        "command": "cuddleCode.exportBundledVoiceCache",
+        "title": "Cuddle Code: Export Bundled Voice Cache"
+      },
+      {
+        "command": "cuddleCode.downloadVoiceBundle",
+        "title": "Cuddle Code: Download Voice Bundle"
+      },
+      {
+        "command": "cuddleCode.clearDownloadedVoiceBundle",
+        "title": "Cuddle Code: Clear Downloaded Voice Bundle"
       },
       {
         "command": "cuddleCode.showTriggerHealth",
@@ -195,6 +210,11 @@
           "type": "boolean",
           "default": false,
           "description": "Generate all script lines into cache when extension starts (audio mode only)."
+        },
+        "cuddleCode.voiceBundleIndexUrl": {
+          "type": "string",
+          "default": "",
+          "description": "Optional URL to downloadable voice-bundle/index.json for on-demand offline audio bundle install."
         },
         "cuddleCode.voicePersona": {
           "type": "string",

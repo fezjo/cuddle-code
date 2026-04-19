@@ -27,6 +27,7 @@ export function getConfig(): CoachConfig {
     audioKeepAlive: config.get<boolean>("audioKeepAlive", true),
     usePreGeneratedAudio: config.get<boolean>("usePreGeneratedAudio", true),
     preGenerateOnStartup: config.get<boolean>("preGenerateOnStartup", false),
+    voiceBundleIndexUrl: config.get<string>("voiceBundleIndexUrl", "").trim(),
     voicePersona: config.get<"female" | "male" | "mixed">("voicePersona", "female"),
     pacingMode: config.get<"normal" | "demo" | "debug">("pacingMode", "demo"),
     llmApiKey: config.get<string>("llmApiKey", "").trim(),

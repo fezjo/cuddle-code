@@ -23,6 +23,10 @@ export class AudioCache {
   private readonly output: vscode.OutputChannel;
   private index: CacheIndex = { version: CACHE_VERSION, entries: [] };
   private loaded = false;
+  private bundledIndex: CacheIndex = { version: CACHE_VERSION, entries: [] };
+  private bundledLoaded = false;
+  private downloadedBundleIndex: CacheIndex = { version: CACHE_VERSION, entries: [] };
+  private downloadedBundleLoaded = false;
 
   constructor(context: vscode.ExtensionContext, output: vscode.OutputChannel) {
     this.context = context;
@@ -37,7 +41,7 @@ export class AudioCache {
     await this.load();
     const hit = this.findEntry(args);
     if (!hit) {
-      return { indexed: false };
+      return this.getBundled(args);
     }
 
     if (hit.blockedReason) {
@@ -47,6 +51,10 @@ export class AudioCache {
     try {
       return { indexed: true, audio: await fs.readFile(this.absAudioFile(hit.file)) };
     } catch {
+      const bundled = await this.getBundled(args);
+      if (bundled.audio || bundled.blockedReason) {
+        return bundled;
+      }
       return { indexed: true };
     }
   }
@@ -188,6 +196,35 @@ export class AudioCache {
     };
   }
 
+  public async exportBundle(destinationDir: string): Promise<{ entries: number; copiedFiles: number }> {
+    await this.load();
+    await fs.mkdir(destinationDir, { recursive: true });
+
+    const files = new Set(this.index.entries.map((x) => x.file).filter((x) => x));
+    let copiedFiles = 0;
+    for (const file of files) {
+      try {
+        await fs.copyFile(this.absAudioFile(file), join(destinationDir, file));
+        copiedFiles += 1;
+      } catch {
+        continue;
+      }
+    }
+
+    const bundleIndex: CacheIndex = {
+      version: CACHE_VERSION,
+      entries: this.index.entries.map((x) => ({
+        trigger: x.trigger,
+        persona: x.persona,
+        text: x.text,
+        file: x.file,
+        blockedReason: x.blockedReason
+      }))
+    };
+    await fs.writeFile(join(destinationDir, "index.json"), JSON.stringify(bundleIndex, null, 2), "utf8");
+    return { entries: bundleIndex.entries.length, copiedFiles };
+  }
+
   private async load(): Promise<void> {
     if (this.loaded) {
       return;
@@ -224,8 +261,156 @@ export class AudioCache {
     return join(this.audioDir(), file);
   }
 
+  private bundledDir(): string {
+    return join(this.context.extensionPath, "voice-bundle");
+  }
+
+  private downloadedBundleDir(): string {
+    return join(this.context.globalStorageUri.fsPath, "voice-bundle");
+  }
+
+  private absBundledIndex(): string {
+    return join(this.bundledDir(), "index.json");
+  }
+
+  private absBundledAudioFile(file: string): string {
+    return join(this.bundledDir(), file);
+  }
+
+  private absDownloadedBundleIndex(): string {
+    return join(this.downloadedBundleDir(), "index.json");
+  }
+
+  private absDownloadedBundleAudioFile(file: string): string {
+    return join(this.downloadedBundleDir(), file);
+  }
+
   private findEntry(args: { trigger: TriggerType; persona: Persona; text: string }): CacheIndex["entries"][number] | undefined {
     return this.index.entries.find((x) => x.trigger === args.trigger && x.persona === args.persona && x.text === args.text);
+  }
+
+  private async getBundled(args: {
+    trigger: TriggerType;
+    persona: Persona;
+    text: string;
+  }): Promise<{ indexed: boolean; audio?: Buffer; blockedReason?: string }> {
+    await this.loadDownloadedBundle();
+    const downloaded = this.downloadedBundleIndex.entries.find(
+      (x) => x.trigger === args.trigger && x.persona === args.persona && x.text === args.text
+    );
+    if (downloaded) {
+      if (downloaded.blockedReason) {
+        return { indexed: true, blockedReason: downloaded.blockedReason };
+      }
+      try {
+        return { indexed: true, audio: await fs.readFile(this.absDownloadedBundleAudioFile(downloaded.file)) };
+      } catch {
+        return { indexed: true };
+      }
+    }
+
+    await this.loadBundled();
+    const hit = this.bundledIndex.entries.find(
+      (x) => x.trigger === args.trigger && x.persona === args.persona && x.text === args.text
+    );
+    if (!hit) {
+      return { indexed: false };
+    }
+    if (hit.blockedReason) {
+      return { indexed: true, blockedReason: hit.blockedReason };
+    }
+    try {
+      return { indexed: true, audio: await fs.readFile(this.absBundledAudioFile(hit.file)) };
+    } catch {
+      return { indexed: true };
+    }
+  }
+
+  private async loadBundled(): Promise<void> {
+    if (this.bundledLoaded) {
+      return;
+    }
+
+    try {
+      const raw = await fs.readFile(this.absBundledIndex(), "utf8");
+      const parsed = JSON.parse(raw) as CacheIndex;
+      if (parsed.version === CACHE_VERSION && Array.isArray(parsed.entries)) {
+        this.bundledIndex = parsed;
+        this.output.appendLine(`[CUDDLE] Bundled voice cache loaded: entries=${parsed.entries.length}`);
+      }
+    } catch {
+      this.bundledIndex = { version: CACHE_VERSION, entries: [] };
+    }
+
+    this.bundledLoaded = true;
+  }
+
+  private async loadDownloadedBundle(): Promise<void> {
+    if (this.downloadedBundleLoaded) {
+      return;
+    }
+
+    try {
+      const raw = await fs.readFile(this.absDownloadedBundleIndex(), "utf8");
+      const parsed = JSON.parse(raw) as CacheIndex;
+      if (parsed.version === CACHE_VERSION && Array.isArray(parsed.entries)) {
+        this.downloadedBundleIndex = parsed;
+        this.output.appendLine(`[CUDDLE] Downloaded voice bundle loaded: entries=${parsed.entries.length}`);
+      }
+    } catch {
+      this.downloadedBundleIndex = { version: CACHE_VERSION, entries: [] };
+    }
+
+    this.downloadedBundleLoaded = true;
+  }
+
+  public async installDownloadedBundle(
+    indexUrl: string,
+    onProgress?: (args: { done: number; total: number; file: string }) => void
+  ): Promise<{ entries: number; downloadedFiles: number }> {
+    const normalizedIndexUrl = indexUrl.trim();
+    if (!normalizedIndexUrl) {
+      throw new Error("Voice bundle index URL is empty.");
+    }
+
+    const indexRes = await fetch(normalizedIndexUrl);
+    if (!indexRes.ok) {
+      throw new Error(`Failed to download bundle index (${indexRes.status}).`);
+    }
+    const rawIndex = (await indexRes.text()).trim();
+    const parsed = JSON.parse(rawIndex) as CacheIndex;
+    if (parsed.version !== CACHE_VERSION || !Array.isArray(parsed.entries)) {
+      throw new Error("Bundle index has unsupported format/version.");
+    }
+
+    const baseUrl = normalizedIndexUrl.replace(/\/[^/]*$/, "");
+    const files = [...new Set(parsed.entries.map((x) => x.file).filter((x) => x))];
+
+    await fs.mkdir(this.downloadedBundleDir(), { recursive: true });
+    let done = 0;
+    for (const file of files) {
+      const res = await fetch(`${baseUrl}/${encodeURIComponent(file)}`);
+      if (!res.ok) {
+        throw new Error(`Failed to download bundle audio file ${file} (${res.status}).`);
+      }
+      const buf = Buffer.from(await res.arrayBuffer());
+      await fs.writeFile(this.absDownloadedBundleAudioFile(file), buf);
+      done += 1;
+      if (onProgress) {
+        onProgress({ done, total: files.length, file });
+      }
+    }
+
+    await fs.writeFile(this.absDownloadedBundleIndex(), JSON.stringify(parsed, null, 2), "utf8");
+    this.downloadedBundleIndex = parsed;
+    this.downloadedBundleLoaded = true;
+    return { entries: parsed.entries.length, downloadedFiles: files.length };
+  }
+
+  public async clearDownloadedBundle(): Promise<void> {
+    await fs.rm(this.downloadedBundleDir(), { recursive: true, force: true });
+    this.downloadedBundleIndex = { version: CACHE_VERSION, entries: [] };
+    this.downloadedBundleLoaded = true;
   }
 }
 
