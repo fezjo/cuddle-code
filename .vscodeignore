@@ -15,3 +15,4 @@ PLAN_UPDATE.md
 lines2.md
 dist/**/*.map
 !sandy.png
+!voice-bundle/**
