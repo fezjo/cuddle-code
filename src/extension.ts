@@ -469,9 +469,7 @@ export function activate(context: vscode.ExtensionContext): void {
       output.appendLine(
         `[CUDDLE] Exported bundled voice cache: destination=${destination} entries=${result.entries} copiedFiles=${result.copiedFiles}`
       );
-      vscode.window.showInformationMessage(
-        `Cuddle Code bundled cache exported to voice-bundle (${result.copiedFiles} files).`
-      );
+      vscode.window.showInformationMessage(`Cuddle Code bundled cache exported to voice-bundle (${result.copiedFiles} files).`);
       output.show(true);
     })
   );

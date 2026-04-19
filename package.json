@@ -3,7 +3,7 @@
   "displayName": "Cuddle Code",
   "icon": "sandy.png",
   "description": "VS Code extension that reacts to coding activity with supportive voice coaching using ElevenLabs.",
-  "version": "0.0.2",
+  "version": "0.0.3",
   "publisher": "overfit",
   "license": "UNLICENSED",
   "repository": {
@@ -213,8 +213,8 @@
         },
         "cuddleCode.voiceBundleIndexUrl": {
           "type": "string",
-          "default": "",
-          "description": "Optional URL to downloadable voice-bundle/index.json for on-demand offline audio bundle install."
+          "default": "https://raw.githubusercontent.com/fezjo/cuddle-code/refs/heads/master/voice-bundle-female/index.json",
+          "description": "Optional URL to downloadable voice-bundle/index.json for on-demand offline audio bundle install. Current default points to the female subset bundle."
         },
         "cuddleCode.voicePersona": {
           "type": "string",

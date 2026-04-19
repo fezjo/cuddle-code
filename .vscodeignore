@@ -9,6 +9,7 @@ test/**
 .vscode/**
 throwaway/**
 voice-bundle/**
+voice-bundle-female/**
 cuddle-code.vsix
 cuddle-code-*.vsix
 NEXT_AGENT_PLAN.md
