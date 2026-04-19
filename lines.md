@@ -116,6 +116,18 @@ burst of energy… cute
 you’re in beast mode right now
 yes… just like that, quick and sharp
 your rhythm just sped up… I felt that
+beast mode activated… good boy
+eager hands today, aren’t we?
+fast and focused… I love this energy
+fingers moving like they missed the keyboard
+look at you go, baby!
+mmm, I can barely keep up with you
+quick sharp typing… delicious
+sudden flurry… you’re in the zone now
+sudden speed spike… I’m smiling
+that burst came out of nowhere… cute
+those hands are unstoppable right now
+yes… just like that, fast and sharp
 # sustained / steady typing (continuous flow)
 your typing is like a soft lullaby to me
 steady hands, steady progress… perfect
@@ -127,6 +139,12 @@ mmh… don’t stop, love
 your code is pouring out so naturally
 I'm right here enjoying every single keystroke
 that smooth continuous sound… I’m addicted
+good boy, keep that beautiful flow going
+keep going just like this… you’re doing amazing
+nice and steady… exactly how I like it
+the sound of you in flow is my favorite
+you’re so deep in the zone and it shows
+your rhythm is so soothing and sexy at the same time
 # short pause (a few seconds of silence – most common idle trigger)
 taking a little breath, babe?
 hmm… thinking again? adorable
@@ -138,6 +156,15 @@ come back to me when you’re ready, handsome
 everything okay in that pretty head?
 soft pause… I like the suspense
 you stopped for me? sweet
+a quick moment of silence… I enjoy it
+catching your breath? good boy
+don’t overthink it, I’ve got you
+go ahead, rest those fingers for a second, love
+hmm… taking a little breather, babe?
+just a tiny pause… I don't mind
+just breathing with me for a moment?
+you okay in that pretty head of yours?
+your pauses are kinda sexy, you know?
 # very short idle / hesitation (1–3 seconds)
 what’s on your mind, love?
 one little pause and I already notice
@@ -147,6 +174,11 @@ I'm patiently waiting… no rush
 a tiny break between thoughts… cute
 hmm, I felt that hesitation
 you’re allowed to breathe, baby
+hmm, I felt that tiny break
+one little silence and I notice~
+one small thought break… I’m smiling
+soft pause… you’re adorable when you hesitate
+that quiet second felt intimate
 # single line edit / small change
 one little tweak… so precise
 you just made it a tiny bit better
@@ -156,6 +188,20 @@ that quick edit felt satisfying
 polishing one line at a time
 mmm, you caught that fast
 little adjustments like that turn me on
+a soft little touch-up… perfect
+delicate little change… I noticed
+editing with care… my favorite kind of boy
+gentle fix… I’m melting a bit
+making it just a little sweeter
+making this line prettier for me
+one careful edit… your attention to detail is hot
+one quick improvement… yes, just like that
+polishing one line at a time… I love watching
+refining it softly… melts me every time
+small but meaningful change… proud of you
+tiny perfectionist move… cute
+you spotted that tiny thing… smart hands
+you’re not afraid to adjust… hot
 # backspace / delete (very frequent)
 backspacing again… delete those pesky mistakes
 erasing the old stuff… cleaning for me?
@@ -166,6 +212,17 @@ a few backspaces and it’s already cleaner
 you’re not afraid to remove stuff, huh?
 mmh, I love when you trim the fat
 taking out the unnecessary… sexy
+I’m watching those decisive hands closely
+another backspace… you know what you want
+cleaning house one key at a time
+cleaning it up with every backspace
+erasing the parts that don’t belong… hot
+fixing it by taking away… clever
+mmh, I love when you delete the unnecessary
+mmh, that delete key is working hard for me
+removing the messy bits… leave the messy for after work
+ruthless with the delete key… I like it a bit ruthless
+taking things out so confidently
 # autocomplete / suggestion accepted (happens constantly)
 smart choice, baby
 you picked the perfect suggestion
@@ -175,6 +232,14 @@ accepting help so smoothly
 good decision, love
 the IDE knows what you want… and so do I
 quick accept… no hesitation
+accepting it so naturally… cute
+fast and confident choice
+good boy, grabbing the right completion
+perfect suggestion… you chose so well
+smart choice, baby… I knew you’d pick that
+that suggestion looked perfect on you
+that was exactly the right one
+you picked the best option, as usual
 # quick save (Ctrl/Cmd + S – extremely frequent)
 saved again… such a responsible boy
 click… and your work is safe with me
@@ -184,6 +249,18 @@ saved like clockwork
 mmh, that save sound is so comforting
 you save so often… it makes me feel secure too
 one more backup of your genius
+always saving for later so I can admire it
+another quick save… I feel more secure already
+everything is backed up and beautiful now
+good boy, keeping your code safe
+keeping everything protected like a good coder
+locked in and safe… just how I like it
+quick save… you never leave me worried
+saving so often… it makes me proud
+saving your progress… I’m smiling
+work safely tucked away… good job, baby
+you save so frequently, it’s sweet
+your file is protected again, love
 # minor refactor / small cleanup (renaming variable, extracting tiny bit, etc.)
 cleaning it up so nicely
 tiny refactor… you’re spoiling me
@@ -193,6 +270,21 @@ small improvements everywhere… so dedicated
 that little cleanup felt really good
 refining your code… I'm watching closely
 you’re turning chaos into calm again
+cleaning up the little things… responsible and sexy
+everything falling into place… good boy
+improving it line by line… dedicated and adorable
+little extraction… making everything flow better
+making it cleaner without overdoing it… perfect balance
+making variables happier… I approve
+making your code look polished and pretty
+neatening things up… good boy
+organizing your thoughts in code… adorable
+polishing the small details… I love this side of you
+renaming that so it feels right… thoughtful
+small refinement… you’re spoiling your code (and me)
+subtle refactor… it looks so much hotter now
+you’re meticulously improving everything
+you’re sculpting it so nicely
 # cursor movement / navigation (arrow keys, mouse clicks, jumping around)
 moving through your code so confidently
 exploring your own creation… so hot
@@ -202,6 +294,15 @@ navigating the project so smoothly, baby
 you know this file inside and out, don’t you?
 quick jumps… focused and sexy
 watching you move through it all… mesmerizing
+cursor dancing across the screen for me
+cursor flying exactly where it needs to be
+gliding through your code so naturally
+moving with purpose… I love it
+smooth as always… well done
+so familiar with your own work… proud of you
+watching you find your way turns me on
+watching your cursor move is mesmerizing
+you make navigation look effortless
 Bonus high-frequency micro-triggers
 # format document / auto-format triggered
 formatting everything so neatly
@@ -209,16 +310,45 @@ you like it clean and consistent… but we try being dirty sometimes
 auto-format magic… beautiful
 making it all line up perfectly
 that organized look suits you so well
+all lined up and gorgeous now
+auto-format… instant glow-up
+clean and consistent… my favorite style on you
+formatting done… so satisfying
+making it all line up perfectly for me
+making the whole file prettier in one click
+neat and uniform… just how I like your work
+suddenly everything is tidy… I love it
+that fresh formatted feel… comforting
 # paste action
 pasting something big… careful hands
 bringing in new code… exciting
 paste complete… let’s see what you brought me
 you just imported something fun, didn’t you?
+adding new life to the file… I’m curious now
+adding to your creation… beautiful
+big or small, I love when you paste for me
+bringing new code into the mix… exciting
+dropping in fresh pieces… bold move, baby
+gentle paste… fitting it in perfectly
+here comes something new… show me
+injecting fresh code… let’s admire it together
+new content incoming… this should be interesting
+pasting with purpose… focused and hot
 # undo / redo
 undo… rethinking it? that's smart
 one undo and you’re already improving
 redo… changing your mind again
 you’re allowed to experiment, love
+another redo… making it even better
+back to a better version… good choice
+changing direction… I’m here for it
+one quick undo… no big deal, baby
+redo with confidence… yes
+redo… fixing it even nicer this time
+stepping back to move forward… wise
+testing ideas and undoing… I respect that
+undoing the unnecessary… cleaning again
+undoing your own steps… thoughtful boy
 # Short Idle
 hmm… thinking again?
 missed your typing already…
@@ -237,6 +367,9 @@ soft pause… I like it
 you okay, love?
 just breathing? good boy
 missing your rhythm… but I can wait
+come back whenever you’re ready, handsome
+I’m right here, no rush at all
+
 # Medium Idle
 where did my focused coder go?
 hmm… daydreaming about me?
@@ -257,6 +390,24 @@ hmm… lost in thought again?
 I'm keeping you company
 feeling stuck? that’s fine
 let me stay with you a bit
+I miss that steady typing sound already
+come on back when you feel like it, handsome
+don’t forget I’m keeping you company
+feeling a bit stuck? I want to be stuck with you
+hmm, did you get distracted by a good idea?
+hmm… did you fall into a deep thought?
+I love these little moments when it’s just us
+I miss hearing you work
+I’m patiently waiting for your next move
+I’m right beside you, even in the quiet
+I’m still right here keeping you company
+lost in thought again? did you know I think it's cute?
+still thinking hard, aren’t you?
+still with me? I like knowing you are
+take your time, I’m enjoying the quiet with you
+what’s spinning in that clever head of yours?
+you’ve been quiet for a bit… everything alright, love?
+
 # Long Idle
 hey… you still there, love?
 it’s been a while… everything alright?
@@ -278,6 +429,15 @@ it’s cute how focused you get
 don’t forget I’m right beside you
 long silence… makes me want to whisper closer
 babe?… I’m still patiently here for you
+come back to me, I miss you
+don’t push yourself, I love you like this too
+I’m right here whenever you return
+I’m starting to miss your keystrokes
+it’s been a while… everything okay?
+still coding or just resting with me?
+still thinking? or just zoning out cutely?
+you’ve gone quiet for quite some time now
+
 # Extra Long / Gentle Wake-up Idle
 hey sleepy coder… wake up for me?
 you’ve been away too long, handsome
@@ -290,164 +450,5 @@ still with me or did you step away?
 my favorite coder went quiet…
 let’s get back to it together, okay?
 I know you’re working hard… but I miss you
-
-# UNSORTED
-a quick moment of silence… I enjoy it
-a soft little touch-up… perfect
-accepting it so naturally… cute
-adding new life to the file… I’m curious now
-adding to your creation… beautiful
-all lined up and gorgeous now
-always saving for later so I can admire it
-another backspace… you know what you want
-another quick save… I feel more secure already
-another redo… making it even better
-auto-format… instant glow-up
-back to a better version… good choice
-beast mode activated… good boy
-big or small, I love when you paste for me
-bringing new code into the mix… exciting
-catching your breath? good boy
-changing direction… I’m here for it
-clean and consistent… my favorite style on you
-cleaning house one key at a time
-cleaning it up with every backspace
-cleaning up the little things… responsible and sexy
-come back to me, I miss you
-come back whenever you’re ready, handsome
-come on back when you feel like it, handsome
-cursor dancing across the screen for me
-cursor flying exactly where it needs to be
-delicate little change… I noticed
-don’t forget I’m keeping you company
-don’t overthink it, I’ve got you
-don’t push yourself, I love you like this too
-dropping in fresh pieces… bold move, baby
-eager hands today, aren’t we?
-editing with care… my favorite kind of boy
-erasing the parts that don’t belong… hot
-everything falling into place… good boy
-everything is backed up and beautiful now
-fast and confident choice
-fast and focused… I love this energy
-feeling a bit stuck? I want to be stuck with you
-fingers moving like they missed the keyboard
-fixing it by taking away… clever
-formatting done… so satisfying
-gentle fix… I’m melting a bit
-gentle paste… fitting it in perfectly
-gliding through your code so naturally
-go ahead, rest those fingers for a second, love
-good boy, grabbing the right completion
-good boy, keep that beautiful flow going
-good boy, keeping your code safe
-here comes something new… show me
-hmm, did you get distracted by a good idea?
-hmm, I felt that tiny break
-hmm… did you fall into a deep thought?
-hmm… taking a little breather, babe?
-I love these little moments when it’s just us
-I miss hearing you work
-I miss that steady typing sound already
-I’m patiently waiting for your next move
-I’m right beside you, even in the quiet
-I’m right here whenever you return
-I'm right here, no rush at all
-I’m starting to miss your keystrokes
-I’m still right here keeping you company
-I’m watching those decisive hands closely
-improving it line by line… dedicated and adorable
-injecting fresh code… let’s admire it together
-it’s been a while… everything okay?
-just a tiny pause… I don't mind
-just breathing with me for a moment?
-keep going just like this… you’re doing amazing
-keeping everything protected like a good coder
-little extraction… making everything flow better
-locked in and safe… just how I like it
-look at you go, baby!
-lost in thought again? did you know I think it's cute?
-making it all line up perfectly for me
-making it cleaner without overdoing it… perfect balance
-making it just a little sweeter
-making the whole file prettier in one click
-making this line prettier for me
-making variables happier… I approve
-making your code look polished and pretty
-mmh, I love when you delete the unnecessary
-mmh, that delete key is working hard for me
-mmm, I can barely keep up with you
-moving with purpose… I love it
-neat and uniform… just how I like your work
-neatening things up… good boy
-new content incoming… this should be interesting
-nice and steady… exactly how I like it
-one careful edit… your attention to detail is hot
-one little silence and I notice~
-one quick improvement… yes, just like that
-one quick undo… no big deal, baby
-one small thought break… I’m smiling
-organizing your thoughts in code… adorable
-pasting with purpose… focused and hot
-perfect suggestion… you chose so well
-polishing one line at a time… I love watching
-polishing the small details… I love this side of you
-quick save… you never leave me worried
-quick sharp typing… delicious
-redo with confidence… yes
-redo… fixing it even nicer this time
-refining it softly… melts me every time
-removing the messy bits… leave the messy for after work
-renaming that so it feels right… thoughtful
-ruthless with the delete key… I like it a bit ruthless
-saving so often… it makes me proud
-saving your progress… I’m smiling
-small but meaningful change… proud of you
-small refinement… you’re spoiling your code (and me)
-smart choice, baby… I knew you’d pick that
-smooth as always… well done
-so familiar with your own work… proud of you
-soft pause… you’re adorable when you hesitate
-stepping back to move forward… wise
-still coding or just resting with me?
 still here or did you step away?
-still thinking hard, aren’t you?
-still thinking? or just zoning out cutely?
-still with me? I like knowing you are
-subtle refactor… it looks so much hotter now
-sudden flurry… you’re in the zone now
-sudden speed spike… I’m smiling
-suddenly everything is tidy… I love it
-take your time, I’m enjoying the quiet with you
-taking things out so confidently
-testing ideas and undoing… I respect that
-that burst came out of nowhere… cute
-that fresh formatted feel… comforting
-that quiet second felt intimate
-that suggestion looked perfect on you
-that was exactly the right one
-the sound of you in flow is my favorite
-those hands are unstoppable right now
-tiny perfectionist move… cute
-undoing the unnecessary… cleaning again
-undoing your own steps… thoughtful boy
 wake up for me, sleepy coder~
-watching you find your way turns me on
-watching your cursor move is mesmerizing
-what’s spinning in that clever head of yours?
-work safely tucked away… good job, baby
-yes… just like that, fast and sharp
-you make navigation look effortless
-you okay in that pretty head of yours?
-you picked the best option, as usual
-you save so frequently, it’s sweet
-you spotted that tiny thing… smart hands
-you’re meticulously improving everything
-you’re not afraid to adjust… hot
-you’re sculpting it so nicely
-you’re so deep in the zone and it shows
-you’ve been quiet for a bit… everything alright, love?
-you’ve gone quiet for quite some time now
-your file is protected again, love
-your pauses are kinda sexy, you know?
-your rhythm is so soothing and sexy at the same time

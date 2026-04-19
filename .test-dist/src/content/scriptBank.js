@@ -9,6 +9,13 @@ const node_fs_1 = require("node:fs");
 const node_path_1 = require("node:path");
 const HEAD_ALIASES = {
     "long pause": "idleLong",
+    "short idle": "idleShort",
+    "medium idle": "idleLong",
+    "long idle": "idleVeryLong",
+    "extra long / gentle wake-up idle": "idleVeryLong",
+    "short idle (1-4 seconds) - most common trigger": "idleShort",
+    "medium idle (5-15 seconds)": "idleLong",
+    "long idle (15-60+ seconds)": "idleVeryLong",
     "quick burst": "burstTyping",
     "sustained typing": "sustainedTyping",
     "long line": "longLine",
@@ -31,10 +38,13 @@ const HEAD_ALIASES = {
     "very short idle / hesitation (1-3 seconds)": "idleVeryShort",
     "single line edit / small change": "singleLineEdit",
     "backspace / delete (very frequent)": "deletingCode",
+    "backspace / delete (very high frequency - needs lots of variety)": "deletingCode",
     "autocomplete / suggestion accepted (happens constantly)": "autocompleteAccepted",
     "quick save (ctrl/cmd + s - extremely frequent)": "fileSaved",
     "minor refactor / small cleanup (renaming variable, extracting tiny bit, etc.)": "largeRefactor",
     "cursor movement / navigation (arrow keys, mouse clicks, jumping around)": "cursorNavigation",
+    "cursor movement / navigation": "cursorNavigation",
+    "typing burst (sudden fast flurry)": "burstTyping",
     "format document / auto-format triggered": "formatDocument",
     "paste action": "pasteAction",
     "undo / redo": "undoRedo"
