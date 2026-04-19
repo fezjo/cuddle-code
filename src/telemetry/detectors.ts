@@ -123,34 +123,50 @@ export function detectCommentInsertion(event: SimpleChangeEvent, languageId: str
 }
 
 export function detectSandyMention(event: SimpleChangeEvent, languageId: string): string | undefined {
-  const prefixes = commentPrefixesFor(languageId);
-  if (prefixes.length === 0) {
-    return undefined;
-  }
-
   for (const change of event.contentChanges) {
     const text = change.text.trim();
     if (!text) {
       continue;
     }
-    const looksLikeComment = prefixes.some((p) => text.startsWith(p)) || text.includes("/*") || text.includes("*/");
-    if (looksLikeComment && /\bsandy\b/i.test(text)) {
+    if (isSandyCommentText(text, languageId)) {
       return text;
     }
   }
   return undefined;
 }
 
+export function detectSandyMentionInLine(lineText: string, languageId: string): string | undefined {
+  const text = lineText.trim();
+  if (!text) {
+    return undefined;
+  }
+  return isSandyCommentText(text, languageId) ? text : undefined;
+}
+
 export function commentPrefixesFor(languageId: string): string[] {
+  const universal = ["#", "//", "///", "/*", "*", "--", ";"];
   switch (languageId) {
+    case "typescript":
+    case "typescriptreact":
+    case "javascript":
+    case "javascriptreact":
+    case "java":
+    case "csharp":
+    case "go":
+    case "kotlin":
+    case "swift":
+    case "php":
+    case "scala":
+    case "ruby":
+      return universal;
     case "python":
-      return ["#"];
+      return universal;
     case "cpp":
     case "c":
     case "rust":
-      return ["//", "///", "/*", "*"];
+      return universal;
     default:
-      return [];
+      return universal;
   }
 }
 
@@ -244,4 +260,38 @@ export function detectRefactorSignal(changes: readonly SimpleChange[]): Refactor
 
 function tokenSet(line: string): Set<string> {
   return new Set((line.match(/[A-Za-z_][A-Za-z0-9_]*/g) ?? []).filter((x) => x.length > 1));
+}
+
+function isSandyCommentText(text: string, languageId: string): boolean {
+  if (!/\bsandy\b/i.test(text)) {
+    return false;
+  }
+
+  const prefixes = commentPrefixesFor(languageId);
+  if (prefixes.length === 0) {
+    return false;
+  }
+
+  const trimmed = text.trimStart();
+  if (prefixes.some((p) => trimmed.startsWith(p)) || text.includes("/*") || text.includes("*/")) {
+    return true;
+  }
+
+  const sandyAt = text.search(/\bsandy\b/i);
+  if (sandyAt < 0) {
+    return false;
+  }
+
+  for (const marker of inlineCommentMarkers(prefixes)) {
+    const at = text.indexOf(marker);
+    if (at >= 0 && sandyAt > at) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+function inlineCommentMarkers(prefixes: string[]): string[] {
+  return prefixes.filter((p) => p === "#" || p === "//" || p === "/*" || p === "--" || p === ";");
 }

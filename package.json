@@ -89,7 +89,7 @@
           "default": "audio",
           "description": "mock logs lines only; audio calls ElevenLabs and plays sound."
         },
-        "cuddleCode.apiKey": {
+        "cuddleCode.elevenlabsApiKey": {
           "type": "string",
           "default": "",
           "description": "ElevenLabs API key (used in audio mode)."
@@ -210,6 +210,26 @@
           "type": "string",
           "default": "",
           "description": "OpenAI API key for dynamic Sandy mention responses."
+        },
+        "cuddleCode.llmBaseUrl": {
+          "type": "string",
+          "default": "https://api.openai.com/v1",
+          "description": "LLM API base URL for Sandy responses (supports OpenAI-compatible providers like OpenRouter)."
+        },
+        "cuddleCode.llmModel": {
+          "type": "string",
+          "default": "gpt-5-mini",
+          "description": "Model id used for Sandy dynamic responses."
+        },
+        "cuddleCode.llmReferer": {
+          "type": "string",
+          "default": "",
+          "description": "Optional HTTP-Referer header for OpenRouter and similar providers."
+        },
+        "cuddleCode.llmTitle": {
+          "type": "string",
+          "default": "Cuddle Code",
+          "description": "Optional X-Title header for OpenRouter and similar providers."
         }
       }
     }

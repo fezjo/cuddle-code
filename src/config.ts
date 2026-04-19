@@ -5,10 +5,12 @@ const SECTION = "cuddleCode";
 
 export function getConfig(): CoachConfig {
   const config = vscode.workspace.getConfiguration(SECTION);
+  const elevenlabsApiKey =
+    config.get<string>("elevenlabsApiKey", "").trim() || config.get<string>("apiKey", "").trim();
   return {
     enabled: config.get<boolean>("enabled", true),
     mode: config.get<"mock" | "audio">("mode", "audio"),
-    apiKey: config.get<string>("apiKey", "").trim(),
+    elevenlabsApiKey,
     longLineThreshold: config.get<number>("longLineThreshold", 100),
     minSecondsBetweenMessages: config.get<number>("minSecondsBetweenMessages", 45),
     longLineCooldownSeconds: config.get<number>("longLineCooldownSeconds", 180),
@@ -27,7 +29,11 @@ export function getConfig(): CoachConfig {
     preGenerateOnStartup: config.get<boolean>("preGenerateOnStartup", false),
     voicePersona: config.get<"female" | "male" | "mixed">("voicePersona", "female"),
     pacingMode: config.get<"normal" | "demo" | "debug">("pacingMode", "demo"),
-    llmApiKey: config.get<string>("llmApiKey", "").trim()
+    llmApiKey: config.get<string>("llmApiKey", "").trim(),
+    llmBaseUrl: config.get<string>("llmBaseUrl", "https://api.openai.com/v1").trim(),
+    llmModel: config.get<string>("llmModel", "gpt-5-mini").trim(),
+    llmReferer: config.get<string>("llmReferer", "").trim(),
+    llmTitle: config.get<string>("llmTitle", "Cuddle Code").trim()
   };
 }
 

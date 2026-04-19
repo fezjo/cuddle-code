@@ -13,6 +13,14 @@ const detectors_1 = require("../src/telemetry/detectors");
     strict_1.default.equal(cpp, "// Sandy, look");
     const rust = (0, detectors_1.detectSandyMention)({ contentChanges: [{ text: "/// sandy", rangeLength: 0, range: { start: { line: 1 } } }] }, "rust");
     strict_1.default.equal(rust, "/// sandy");
+    const ts = (0, detectors_1.detectSandyMentionInLine)("// sandy check this", "typescript");
+    strict_1.default.equal(ts, "// sandy check this");
+    const pyInline = (0, detectors_1.detectSandyMentionInLine)("def fib(n): # sandy where is the bug", "python");
+    strict_1.default.equal(pyInline, "def fib(n): # sandy where is the bug");
+    const mixedCase = (0, detectors_1.detectSandyMentionInLine)("// hello my love SANDY, where's the bug?", "typescript");
+    strict_1.default.equal(mixedCase, "// hello my love SANDY, where's the bug?");
+    const genericLanguage = (0, detectors_1.detectSandyMentionInLine)("-- hey sandy, look here", "haskell");
+    strict_1.default.equal(genericLanguage, "-- hey sandy, look here");
 });
 (0, node_test_1.default)("detectors classify change summaries", () => {
     const sum = (0, detectors_1.summarizeChanges)([{ text: "myCompletion.call(value)", rangeLength: 0, range: { start: { line: 2 } } }]);
@@ -48,7 +56,7 @@ const detectors_1 = require("../src/telemetry/detectors");
     strict_1.default.equal(copilotReplace.hasPaste, false);
 });
 (0, node_test_1.default)("comment prefixes and refactor detector work", () => {
-    strict_1.default.deepEqual((0, detectors_1.commentPrefixesFor)("python"), ["#"]);
+    strict_1.default.ok((0, detectors_1.commentPrefixesFor)("python").includes("#"));
     strict_1.default.equal((0, detectors_1.detectCommentInsertion)({ contentChanges: [{ text: "// comment", rangeLength: 0, range: { start: { line: 1 } } }] }, "cpp"), true);
     const state = new Map();
     const first = (0, detectors_1.detectRefactorishRenaming)("let oldName = 1", 1, 1000, "f", state);

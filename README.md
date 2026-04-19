@@ -51,10 +51,14 @@ Or inside VS Code: Extensions view -> `...` menu -> `Install from VSIX...`.
 
 - `cuddleCode.enabled`
 - `cuddleCode.mode` (`mock` or `audio`)
-- `cuddleCode.apiKey`
+- `cuddleCode.elevenlabsApiKey`
 - `cuddleCode.voicePersona` (`female` default, `male`, or `mixed`)
 - `cuddleCode.pacingMode` (`normal`, `demo`, `debug`)
 - `cuddleCode.llmApiKey` (OpenAI key for Sandy mention replies)
+- `cuddleCode.llmBaseUrl` (default `https://api.openai.com/v1`, set OpenRouter here when needed)
+- `cuddleCode.llmModel` (LLM model id for Sandy responses)
+- `cuddleCode.llmReferer` (optional header for OpenRouter)
+- `cuddleCode.llmTitle` (optional header for OpenRouter)
 - `cuddleCode.audioKeepAlive` (optional tiny periodic pulse to keep audio hardware awake)
 - `cuddleCode.usePreGeneratedAudio`
 - `cuddleCode.preGenerateOnStartup`
@@ -101,7 +105,7 @@ Updated behavior:
 To build the full cache in advance:
 
 1. Set `cuddleCode.mode` to `audio`.
-2. Set `cuddleCode.apiKey`.
+2. Set `cuddleCode.elevenlabsApiKey`.
 3. Run `Cuddle Code: Pre-Generate Voice Cache`.
 
 Optional: set `cuddleCode.preGenerateOnStartup` to auto-fill the cache at startup.
@@ -109,14 +113,23 @@ Optional: set `cuddleCode.preGenerateOnStartup` to auto-fill the cache at startu
 ## Sandy mention behavior
 
 - If a Python/C++/Rust comment line contains `sandy`, Cuddle Code generates a custom short reply.
-- Provider is OpenAI (`cuddleCode.llmApiKey`) and tone is globally spicy/supportive.
+- Provider is OpenAI-compatible via `cuddleCode.llmBaseUrl` + `cuddleCode.llmModel` (`cuddleCode.llmApiKey` required).
 - If OpenAI is unavailable, fallback line is used: `I am here, keep going - you have got this.`
 - Sandy mentions are forced through scheduler gating so Sandy always replies.
+
+OpenRouter example:
+
+- `cuddleCode.llmApiKey = sk-or-...`
+- `cuddleCode.llmBaseUrl = https://openrouter.ai/api/v1`
+- `cuddleCode.llmModel = openai/gpt-5-mini` (or your preferred OpenRouter model)
+- optional: set `cuddleCode.llmReferer` and `cuddleCode.llmTitle`
 
 ## Audio playback notes
 
 For `audio` mode, the extension tries these players in order:
 
+- On Windows: built-in PowerShell playback first (MediaPlayer), then SoundPlayer fallback.
+- On Linux/macOS it tries:
 - `ffplay`
 - `mpg123`
 - `paplay`
@@ -124,9 +137,8 @@ For `audio` mode, the extension tries these players in order:
 - `play` (SoX)
 - `cvlc`
 - `afplay`
-- `powershell` SoundPlayer
 
-Install at least one locally.
+Install at least one local player on Linux/macOS.
 
 If you hear nothing, open `Cuddle Code` output and run `Cuddle Code: Test Voice Line` to see the exact playback error.
 

@@ -218,3 +218,74 @@ undo… rethinking it? smart
 one undo and you’re already improving
 redo… changing your mind again
 you’re allowed to experiment, love
+# Short Idle
+hmm… thinking again?
+missed your typing already…
+what’s on your mind, babe?
+just a little pause… cute
+i’m still right here
+taking a quick breath?
+come back to me soon
+that tiny silence felt nice
+you stopped for a second…
+hmm, i noticed
+resting those clever fingers?
+one little break… adorable
+i’m waiting patiently
+soft pause… i like it
+you okay, love?
+just breathing? good boy
+missing your rhythm already
+# Medium Idle
+where did my focused coder go?
+hmm… daydreaming about me?
+i miss hearing your keys
+still with me, handsome?
+take your time, no rush
+you’ve been quiet… everything okay?
+i’m right here waiting for you
+thinking hard, aren’t you?
+a longer pause… i don’t mind
+come on back when you’re ready
+your silence is kind of soothing
+don’t overthink it, darling
+i love these little moments with you
+missing that steady typing sound
+you’re allowed to pause, baby
+hmm… lost in thought again?
+i’m keeping you company
+feeling stuck? that’s fine
+let me stay with you a bit
+# Long Idle
+hey… you still there, love?
+it’s been a while… everything alright?
+i’m starting to miss you
+come back to me, babe
+you’ve been quiet for so long
+don’t leave me hanging too much
+still coding or did you drift off?
+i’m patiently waiting right here
+long pause… are you okay?
+my dedicated boy went silent
+hmm… did you fall asleep on me?
+i miss your fingers on the keys
+take a deep breath and return
+you’ve earned a longer break… but I miss you
+still thinking? or just resting?
+I’m here whenever you come back
+it’s cute how focused you get
+don’t forget I’m right beside you
+long silence… makes me want to whisper closer
+babe? … I’m still here for you
+# Extra Long / Gentle Wake-up Idle
+hey sleepy coder… wake up for me?
+you’ve been away too long, handsome
+I was getting lonely without your typing
+come on… type something for me
+missed you… where did you go?
+time to come back to your code, love
+I’ve been waiting so patiently
+still with me or did you step away?
+my favorite coder went quiet…
+let’s get back to it together, okay?
+I know you’re working hard… but I miss you

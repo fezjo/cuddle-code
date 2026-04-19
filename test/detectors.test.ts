@@ -5,6 +5,7 @@ import {
   detectDiagnosticTransitions,
   detectCommentInsertion,
   detectRefactorSignal,
+  detectSandyMentionInLine,
   detectSandyMention,
   detectRefactorishRenaming,
   summarizeChanges
@@ -19,6 +20,18 @@ test("detectors recognize sandy mentions in supported comment syntaxes", () => {
 
   const rust = detectSandyMention({ contentChanges: [{ text: "/// sandy", rangeLength: 0, range: { start: { line: 1 } } }] }, "rust");
   assert.equal(rust, "/// sandy");
+
+  const ts = detectSandyMentionInLine("// sandy check this", "typescript");
+  assert.equal(ts, "// sandy check this");
+
+  const pyInline = detectSandyMentionInLine("def fib(n): # sandy where is the bug", "python");
+  assert.equal(pyInline, "def fib(n): # sandy where is the bug");
+
+  const mixedCase = detectSandyMentionInLine("// hello my love SANDY, where's the bug?", "typescript");
+  assert.equal(mixedCase, "// hello my love SANDY, where's the bug?");
+
+  const genericLanguage = detectSandyMentionInLine("-- hey sandy, look here", "haskell");
+  assert.equal(genericLanguage, "-- hey sandy, look here");
 });
 
 test("detectors classify change summaries", () => {
@@ -62,7 +75,7 @@ test("detectors classify change summaries", () => {
 });
 
 test("comment prefixes and refactor detector work", () => {
-  assert.deepEqual(commentPrefixesFor("python"), ["#"]);
+  assert.ok(commentPrefixesFor("python").includes("#"));
   assert.equal(
     detectCommentInsertion({ contentChanges: [{ text: "// comment", rangeLength: 0, range: { start: { line: 1 } } }] }, "cpp"),
     true

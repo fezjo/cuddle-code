@@ -5,17 +5,40 @@ import {
   detectCommentInsertion,
   detectRefactorSignal,
   detectSandyMention,
+  detectSandyMentionInLine,
   summarizeChanges
 } from "./detectors";
 import { SingleLineEditSignal } from "./singleLineSignal";
 
 type TriggerListener = (event: TriggerPayload) => void;
 
+type PendingSandyMention = {
+  docUri: string;
+  line: number;
+  languageId: string;
+  sourceText: string;
+  contextBefore?: string;
+  contextAfter?: string;
+};
+
+type FireOptions = {
+  languageId?: string;
+  sourceText?: string;
+  contextBefore?: string;
+  contextAfter?: string;
+  commandLine?: string;
+  forceBypassScheduler?: boolean;
+};
+
 export class TypingTracker {
   private static readonly CURSOR_NAV_MIN_GAP_MS = 5000;
   private static readonly CURSOR_NAV_REQUIRED_SPAN_MS = 15000;
   private static readonly CURSOR_NAV_REQUIRED_BUCKETS = 12;
+  private static readonly SANDY_EDIT_GUARD_MS = 9000;
+  private static readonly SANDY_STARTUP_GUARD_MS = 4000;
+  private static readonly SANDY_DEBOUNCE_MS = 2000;
   private readonly listener: TriggerListener;
+  private readonly output: vscode.OutputChannel;
   private readonly singleLineSignal = new SingleLineEditSignal();
   private config: CoachConfig;
   private readonly editTimestamps: number[] = [];
@@ -28,13 +51,19 @@ export class TypingTracker {
   private readonly diagnosticsByUri = new Map<string, boolean>();
   private readonly fileSwitchTimestamps: number[] = [];
   private readonly cursorMoveBuckets = new Map<number, true>();
+  private sandyDebounceTimer: NodeJS.Timeout | undefined;
+  private pendingSandyMention: PendingSandyMention | undefined;
+  private sandyGuardUntil = 0;
+  private sandyActiveDocUri: string | undefined;
+  private sandyActiveLine = -1;
+  private readonly startedAt = Date.now();
   private lastEditAt = 0;
   private lastCursorNavAt = 0;
   private lastCursorSignature = "";
 
   constructor(args: { config: CoachConfig; output: vscode.OutputChannel; onTrigger: TriggerListener }) {
     this.config = args.config;
-    void args.output;
+    this.output = args.output;
     this.listener = args.onTrigger;
     this.trackingPaused = !isTrackableEditor(vscode.window.activeTextEditor);
     this.scheduleIdleTimers();
@@ -57,26 +86,42 @@ export class TypingTracker {
     const now = Date.now();
     this.lastEditAt = now;
     this.cursorMoveBuckets.clear();
+
+    const eventDocUri = event.document.uri.toString();
+    if (this.sandyActiveDocUri === eventDocUri && this.sandyActiveLine >= 0) {
+      const touchedActiveLine = event.contentChanges.some((c) => c.range.start.line === this.sandyActiveLine);
+      if (touchedActiveLine) {
+        this.sandyGuardUntil = now + TypingTracker.SANDY_EDIT_GUARD_MS;
+      }
+    }
     this.editTimestamps.push(now);
     this.trimOld(now);
     this.scheduleIdleTimers();
+
+    const onSandyLineNow = this.isEditingSandyLine(event.document, event.contentChanges);
+    if (onSandyLineNow) {
+      this.sandyGuardUntil = now + TypingTracker.SANDY_EDIT_GUARD_MS;
+    }
+
+    const shouldSuppressGeneralTriggers =
+      onSandyLineNow || now < this.sandyGuardUntil || now - this.startedAt < TypingTracker.SANDY_STARTUP_GUARD_MS;
 
     const burstWindowMs = Math.max(1000, this.config.burstWindowSeconds * 1000);
     const burstCount = this.countInWindow(now, burstWindowMs);
     const charsPerWord = 5;
     const burstThresholdFromWpm = Math.round((this.config.burstWpmThreshold * charsPerWord * this.config.burstWindowSeconds) / 60);
     const burstThreshold = Math.max(12, this.config.burstEditsThreshold, burstThresholdFromWpm);
-    if (burstCount >= burstThreshold) {
+    if (!shouldSuppressGeneralTriggers && burstCount >= burstThreshold) {
       this.fire("burstTyping", "high", `burstCount=${burstCount}`);
     }
 
     const sustainedCount = this.countInWindow(now, 90000);
-    if (sustainedCount >= 52) {
+    if (!shouldSuppressGeneralTriggers && sustainedCount >= 52) {
       this.fire("sustainedTyping", "high", `sustainedCount=${sustainedCount}`);
     }
 
     const longLineLen = longestChangedLineLength(event.document, event.contentChanges);
-    if (longLineLen >= this.config.longLineThreshold) {
+    if (!shouldSuppressGeneralTriggers && longLineLen >= this.config.longLineThreshold) {
       this.fire("longLine", "medium", `lineLength=${longLineLen}`);
     }
 
@@ -86,41 +131,42 @@ export class TypingTracker {
     }
 
     const summary = summarizeChanges(event.contentChanges);
-    if (summary.hasPaste) {
+    if (!shouldSuppressGeneralTriggers && summary.hasPaste) {
       this.fire("pasteAction", "high", `chars=${summary.insertedChars}`);
     }
-    if (summary.onlyDeletes) {
+    if (!shouldSuppressGeneralTriggers && summary.onlyDeletes) {
       this.fire("deletingCode", "high", `deletedChars=${summary.deletedChars}`);
     }
     if (summary.isSingleLineEdit) {
       this.singleLineSignal.noteSingleLineEdit(event.document.uri.toString(), summary.singleLine, now);
     }
-    if (summary.looksLikeAutocomplete) {
+    if (!shouldSuppressGeneralTriggers && summary.looksLikeAutocomplete) {
       this.fire("autocompleteAccepted", "high", `insertedChars=${summary.insertedChars}`);
     }
-    if (summary.looksLikeFormat) {
+    if (!shouldSuppressGeneralTriggers && summary.looksLikeFormat) {
       this.fire("formatDocument", "high", `changes=${event.contentChanges.length}`);
     }
 
     const languageId = event.document.languageId;
-    const sandyMention = detectSandyMention(event, languageId);
+    const sandyMention = this.detectSandyMentionCandidate(event.document, event.contentChanges, languageId);
     if (sandyMention) {
-      this.fire("sandyMention", "strict", "comment-mention", {
-        languageId,
-        sourceText: sandyMention,
-        forceBypassScheduler: true
-      });
+      this.pendingSandyMention = sandyMention;
+      this.sandyActiveDocUri = event.document.uri.toString();
+      this.sandyActiveLine = sandyMention.line;
+    }
+    if (this.pendingSandyMention) {
+      this.scheduleSandyDebounce();
     }
 
     const commentAdded = detectCommentInsertion(event, languageId);
-    if (commentAdded) {
+    if (!shouldSuppressGeneralTriggers && commentAdded) {
       this.fire("addingComments", "medium", `language=${languageId}`);
     }
 
     const refactor = detectRefactorSignal(event.contentChanges);
-    if (refactor.large) {
+    if (!shouldSuppressGeneralTriggers && refactor.large) {
       this.fire("largeRefactor", "high", `lines=${refactor.touchedLines}`);
-    } else if (refactor.minor) {
+    } else if (!shouldSuppressGeneralTriggers && refactor.minor) {
       this.fire("minorRefactor", "medium", "rename-pattern");
     }
   }
@@ -130,6 +176,11 @@ export class TypingTracker {
       return;
     }
     if (!isTrackableDocument(document)) {
+      return;
+    }
+    const now = Date.now();
+    const sameDocAsSandy = this.sandyActiveDocUri === document.uri.toString();
+    if (sameDocAsSandy && now < this.sandyGuardUntil) {
       return;
     }
     this.fire("fileSaved", "high", `language=${document.languageId}`);
@@ -285,6 +336,7 @@ export class TypingTracker {
     clearTimer(this.idleLongTimer);
     clearTimer(this.idleVeryLongTimer);
     clearTimer(this.lateNightTimer);
+    clearTimer(this.sandyDebounceTimer);
   }
 
   private scheduleIdleTimers(): void {
@@ -353,11 +405,136 @@ export class TypingTracker {
     }
   }
 
+  private detectSandyMentionCandidate(
+    doc: vscode.TextDocument,
+    changes: readonly vscode.TextDocumentContentChangeEvent[],
+    languageId: string
+  ): PendingSandyMention | undefined {
+    for (const change of changes) {
+      const line = change.range.start.line;
+      if (line < 0 || line >= doc.lineCount) {
+        continue;
+      }
+      const text = doc.lineAt(line).text;
+      const mention = detectSandyMentionInLine(text, languageId);
+      if (!mention) {
+        continue;
+      }
+      const context = this.buildLineContext(doc, line, 20);
+      return {
+        docUri: doc.uri.toString(),
+        line,
+        languageId,
+        sourceText: mention,
+        contextBefore: context.before,
+        contextAfter: context.after
+      };
+    }
+
+    const mentionFromInsert = detectSandyMention({ contentChanges: changes }, languageId);
+    if (!mentionFromInsert) {
+      return undefined;
+    }
+    const fallbackLine = changes[0]?.range.start.line ?? 0;
+    return {
+      docUri: doc.uri.toString(),
+      line: fallbackLine,
+      languageId,
+      sourceText: mentionFromInsert
+    };
+  }
+
+  private scheduleSandyDebounce(): void {
+    clearTimer(this.sandyDebounceTimer);
+    this.sandyDebounceTimer = setTimeout(() => {
+      void this.firePendingSandyMention();
+    }, TypingTracker.SANDY_DEBOUNCE_MS);
+  }
+
+  private async firePendingSandyMention(): Promise<void> {
+    const pending = this.pendingSandyMention;
+    if (!pending) {
+      return;
+    }
+    if (this.disposed || !this.config.enabled || this.trackingPaused) {
+      this.pendingSandyMention = undefined;
+      return;
+    }
+
+    const silenceMs = Date.now() - this.lastEditAt;
+    if (silenceMs < TypingTracker.SANDY_DEBOUNCE_MS) {
+      this.scheduleSandyDebounce();
+      return;
+    }
+
+    let sourceText = pending.sourceText;
+    let contextBefore = pending.contextBefore;
+    let contextAfter = pending.contextAfter;
+    const openDoc = vscode.workspace.textDocuments.find((d) => d.uri.toString() === pending.docUri);
+    if (openDoc && pending.line >= 0 && pending.line < openDoc.lineCount) {
+      const current = detectSandyMentionInLine(openDoc.lineAt(pending.line).text, pending.languageId);
+      if (!current) {
+        this.pendingSandyMention = undefined;
+        return;
+      }
+      sourceText = current;
+      const context = this.buildLineContext(openDoc, pending.line, 20);
+      contextBefore = context.before;
+      contextAfter = context.after;
+    }
+
+    if (this.config.debugLogs) {
+      this.output.appendLine(
+        `[CUDDLE][SANDY] Debounced comment ready: uri=${pending.docUri} line=${pending.line} text=${sourceText}`
+      );
+    }
+
+    this.pendingSandyMention = undefined;
+    this.sandyGuardUntil = Date.now() + TypingTracker.SANDY_EDIT_GUARD_MS;
+    this.fire("sandyMention", "strict", "comment-mention", {
+      languageId: pending.languageId,
+      sourceText,
+      contextBefore,
+      contextAfter,
+      forceBypassScheduler: true
+    });
+  }
+
+  private buildLineContext(doc: vscode.TextDocument, line: number, radius: number): { before: string; after: string } {
+    const beforeStart = Math.max(0, line - radius);
+    const afterEnd = Math.min(doc.lineCount - 1, line + radius);
+
+    const before: string[] = [];
+    for (let i = beforeStart; i < line; i += 1) {
+      before.push(doc.lineAt(i).text);
+    }
+
+    const after: string[] = [];
+    for (let i = line + 1; i <= afterEnd; i += 1) {
+      after.push(doc.lineAt(i).text);
+    }
+
+    return {
+      before: before.join("\n"),
+      after: after.join("\n")
+    };
+  }
+
+  private isEditingSandyLine(
+    doc: vscode.TextDocument,
+    changes: readonly vscode.TextDocumentContentChangeEvent[]
+  ): boolean {
+    if (this.sandyActiveDocUri !== doc.uri.toString() || this.sandyActiveLine < 0) {
+      return false;
+    }
+    return changes.some((c) => c.range.start.line === this.sandyActiveLine);
+  }
+
   private fire(
     trigger: TriggerType,
     confidence: TriggerConfidence,
     detail: string,
-    options?: { languageId?: string; sourceText?: string; commandLine?: string; forceBypassScheduler?: boolean }
+    options?: FireOptions
   ): void {
     if (!this.config.enabled) {
       return;
@@ -370,6 +547,8 @@ export class TypingTracker {
       metadata: {
         languageId: options?.languageId,
         sourceText: options?.sourceText,
+        contextBefore: options?.contextBefore,
+        contextAfter: options?.contextAfter,
         commandLine: options?.commandLine
       },
       text: "",

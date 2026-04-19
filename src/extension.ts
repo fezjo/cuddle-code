@@ -227,8 +227,8 @@ export function activate(context: vscode.ExtensionContext): void {
   context.subscriptions.push(
     vscode.commands.registerCommand("cuddleCode.preGenerateVoiceCache", async () => {
       const current = getConfig();
-      if (!current.apiKey) {
-        vscode.window.showWarningMessage("Cuddle Code: set cuddleCode.apiKey first.");
+      if (!current.elevenlabsApiKey) {
+        vscode.window.showWarningMessage("Cuddle Code: set cuddleCode.elevenlabsApiKey first.");
         return;
       }
       const scripts = currentRouteScriptLines(current);
@@ -248,7 +248,7 @@ export function activate(context: vscode.ExtensionContext): void {
             scripts,
             async ({ persona, text }) =>
               await synthesizeWithElevenLabs({
-                apiKey: current.apiKey,
+                apiKey: current.elevenlabsApiKey,
                 persona,
                 text
               }),
@@ -335,7 +335,14 @@ export function activate(context: vscode.ExtensionContext): void {
     const persona: Persona = choosePersona(event.trigger, current);
     let text = pickLine(event.trigger, persona);
     if (event.trigger === "sandyMention") {
-      text = await buildSandyResponse(current, event.metadata?.sourceText ?? "", event.metadata?.languageId, out);
+      text = await buildSandyResponse(
+        current,
+        event.metadata?.sourceText ?? "",
+        event.metadata?.languageId,
+        event.metadata?.contextBefore,
+        event.metadata?.contextAfter,
+        out
+      );
     }
 
     out.appendLine(
@@ -348,9 +355,9 @@ export function activate(context: vscode.ExtensionContext): void {
       return;
     }
 
-    if (!current.apiKey) {
-      out.appendLine("[CUDDLE] Audio mode set, but apiKey is missing.");
-      vscode.window.showWarningMessage("Cuddle Code: audio mode needs cuddleCode.apiKey");
+    if (!current.elevenlabsApiKey) {
+      out.appendLine("[CUDDLE] Audio mode set, but elevenlabsApiKey is missing.");
+      vscode.window.showWarningMessage("Cuddle Code: audio mode needs cuddleCode.elevenlabsApiKey");
       return;
     }
 
@@ -382,7 +389,7 @@ export function activate(context: vscode.ExtensionContext): void {
         out.appendLine(`[CUDDLE] Synthesizing trigger=${event.trigger} persona=${persona}`);
         try {
           audio = await synthesizeWithElevenLabs({
-            apiKey: current.apiKey,
+            apiKey: current.elevenlabsApiKey,
             persona,
             text
           });
@@ -412,8 +419,13 @@ export function activate(context: vscode.ExtensionContext): void {
     current: CoachConfig,
     sourceText: string,
     languageId: string | undefined,
+    contextBefore: string | undefined,
+    contextAfter: string | undefined,
     out: vscode.OutputChannel
   ): Promise<string> {
+    if (current.debugLogs) {
+      out.appendLine(`[CUDDLE][SANDY] sourceText(read)=${sourceText}`);
+    }
     if (!sourceText.trim()) {
       return "I am here, keep going - you have got this.";
     }
@@ -424,8 +436,16 @@ export function activate(context: vscode.ExtensionContext): void {
     try {
       return await generateSandyLine({
         apiKey: current.llmApiKey,
+        baseUrl: current.llmBaseUrl,
+        model: current.llmModel,
+        referer: current.llmReferer,
+        title: current.llmTitle,
+        extensionRootPath: context.extensionPath,
         languageId,
-        mentionText: sourceText
+        mentionText: sourceText,
+        contextBefore,
+        contextAfter,
+        onDebugLog: current.debugLogs ? (message) => out.appendLine(message) : undefined
       });
     } catch (err) {
       out.appendLine(`[CUDDLE] Sandy mention fallback: LLM error ${String(err)}`);
@@ -438,8 +458,8 @@ export function activate(context: vscode.ExtensionContext): void {
     if (!current.preGenerateOnStartup || current.mode !== "audio") {
       return;
     }
-    if (!current.apiKey) {
-      output.appendLine("[CUDDLE] Startup pre-generate skipped: missing apiKey.");
+    if (!current.elevenlabsApiKey) {
+      output.appendLine("[CUDDLE] Startup pre-generate skipped: missing elevenlabsApiKey.");
       return;
     }
 
@@ -455,7 +475,7 @@ export function activate(context: vscode.ExtensionContext): void {
       scripts,
       async ({ persona, text }) =>
         await synthesizeWithElevenLabs({
-          apiKey: current.apiKey,
+          apiKey: current.elevenlabsApiKey,
           persona,
           text
         }),

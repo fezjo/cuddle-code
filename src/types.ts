@@ -36,7 +36,7 @@ export type TriggerConfidence = "high" | "medium" | "strict";
 export interface CoachConfig {
   enabled: boolean;
   mode: AsmrMode;
-  apiKey: string;
+  elevenlabsApiKey: string;
   longLineThreshold: number;
   minSecondsBetweenMessages: number;
   longLineCooldownSeconds: number;
@@ -56,6 +56,10 @@ export interface CoachConfig {
   voicePersona: VoicePersonaMode;
   pacingMode: PacingMode;
   llmApiKey: string;
+  llmBaseUrl: string;
+  llmModel: string;
+  llmReferer: string;
+  llmTitle: string;
 }
 
 export interface TriggerPayload {
@@ -66,6 +70,8 @@ export interface TriggerPayload {
   metadata?: {
     languageId?: string;
     sourceText?: string;
+    contextBefore?: string;
+    contextAfter?: string;
     commandLine?: string;
   };
   text: string;

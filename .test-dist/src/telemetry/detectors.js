@@ -3,6 +3,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.summarizeChanges = summarizeChanges;
 exports.detectCommentInsertion = detectCommentInsertion;
 exports.detectSandyMention = detectSandyMention;
+exports.detectSandyMentionInLine = detectSandyMentionInLine;
 exports.commentPrefixesFor = commentPrefixesFor;
 exports.detectRefactorishRenaming = detectRefactorishRenaming;
 exports.detectDiagnosticTransitions = detectDiagnosticTransitions;
@@ -86,32 +87,48 @@ function detectCommentInsertion(event, languageId) {
     });
 }
 function detectSandyMention(event, languageId) {
-    const prefixes = commentPrefixesFor(languageId);
-    if (prefixes.length === 0) {
-        return undefined;
-    }
     for (const change of event.contentChanges) {
         const text = change.text.trim();
         if (!text) {
             continue;
         }
-        const looksLikeComment = prefixes.some((p) => text.startsWith(p)) || text.includes("/*") || text.includes("*/");
-        if (looksLikeComment && /\bsandy\b/i.test(text)) {
+        if (isSandyCommentText(text, languageId)) {
             return text;
         }
     }
     return undefined;
 }
+function detectSandyMentionInLine(lineText, languageId) {
+    const text = lineText.trim();
+    if (!text) {
+        return undefined;
+    }
+    return isSandyCommentText(text, languageId) ? text : undefined;
+}
 function commentPrefixesFor(languageId) {
+    const universal = ["#", "//", "///", "/*", "*", "--", ";"];
     switch (languageId) {
+        case "typescript":
+        case "typescriptreact":
+        case "javascript":
+        case "javascriptreact":
+        case "java":
+        case "csharp":
+        case "go":
+        case "kotlin":
+        case "swift":
+        case "php":
+        case "scala":
+        case "ruby":
+            return universal;
         case "python":
-            return ["#"];
+            return universal;
         case "cpp":
         case "c":
         case "rust":
-            return ["//", "///", "/*", "*"];
+            return universal;
         default:
-            return [];
+            return universal;
     }
 }
 function detectRefactorishRenaming(lineText, lineNumber, now, key, state) {
@@ -181,4 +198,31 @@ function detectRefactorSignal(changes) {
 }
 function tokenSet(line) {
     return new Set((line.match(/[A-Za-z_][A-Za-z0-9_]*/g) ?? []).filter((x) => x.length > 1));
+}
+function isSandyCommentText(text, languageId) {
+    if (!/\bsandy\b/i.test(text)) {
+        return false;
+    }
+    const prefixes = commentPrefixesFor(languageId);
+    if (prefixes.length === 0) {
+        return false;
+    }
+    const trimmed = text.trimStart();
+    if (prefixes.some((p) => trimmed.startsWith(p)) || text.includes("/*") || text.includes("*/")) {
+        return true;
+    }
+    const sandyAt = text.search(/\bsandy\b/i);
+    if (sandyAt < 0) {
+        return false;
+    }
+    for (const marker of inlineCommentMarkers(prefixes)) {
+        const at = text.indexOf(marker);
+        if (at >= 0 && sandyAt > at) {
+            return true;
+        }
+    }
+    return false;
+}
+function inlineCommentMarkers(prefixes) {
+    return prefixes.filter((p) => p === "#" || p === "//" || p === "/*" || p === "--" || p === ";");
 }

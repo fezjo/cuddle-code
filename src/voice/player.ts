@@ -16,16 +16,7 @@ export async function playMp3Buffer(audio: Buffer): Promise<void> {
 }
 
 async function playFile(file: string): Promise<void> {
-  const attempts: Array<{ cmd: string; args: string[] }> = [
-    { cmd: "ffplay", args: ["-nodisp", "-autoexit", "-loglevel", "quiet", file] },
-    { cmd: "mpg123", args: ["-q", file] },
-    { cmd: "paplay", args: [file] },
-    { cmd: "aplay", args: [file] },
-    { cmd: "play", args: ["-q", file] },
-    { cmd: "cvlc", args: ["--play-and-exit", "--intf", "dummy", file] },
-    { cmd: "afplay", args: [file] },
-    { cmd: "powershell", args: ["-c", `(New-Object Media.SoundPlayer '${file}').PlaySync();`] }
-  ];
+  const attempts = playbackAttempts(file);
 
   const failures: string[] = [];
   for (const attempt of attempts) {
@@ -38,6 +29,60 @@ async function playFile(file: string): Promise<void> {
   }
 
   throw new Error(`No supported audio player found. Attempts: ${failures.join(" | ")}`);
+}
+
+function playbackAttempts(file: string): Array<{ cmd: string; args: string[] }> {
+  if (process.platform === "win32") {
+    return [
+      {
+        cmd: "powershell",
+        args: ["-NoProfile", "-ExecutionPolicy", "Bypass", "-Sta", "-Command", windowsMediaPlayerScript(), file]
+      },
+      {
+        cmd: "powershell",
+        args: ["-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", windowsSoundPlayerScript(), file]
+      }
+    ];
+  }
+
+  return [
+    { cmd: "ffplay", args: ["-nodisp", "-autoexit", "-loglevel", "quiet", file] },
+    { cmd: "mpg123", args: ["-q", file] },
+    { cmd: "paplay", args: [file] },
+    { cmd: "aplay", args: [file] },
+    { cmd: "play", args: ["-q", file] },
+    { cmd: "cvlc", args: ["--play-and-exit", "--intf", "dummy", file] },
+    { cmd: "afplay", args: [file] }
+  ];
+}
+
+function windowsMediaPlayerScript(): string {
+  return [
+    "$ErrorActionPreference = 'Stop'",
+    "$path = $args[0]",
+    "Add-Type -AssemblyName presentationCore",
+    "$player = New-Object System.Windows.Media.MediaPlayer",
+    "$player.Open([System.Uri]::new($path))",
+    "$waitUntil = [DateTime]::UtcNow.AddSeconds(5)",
+    "while (-not $player.NaturalDuration.HasTimeSpan -and [DateTime]::UtcNow -lt $waitUntil) { Start-Sleep -Milliseconds 50 }",
+    "$player.Volume = 1.0",
+    "$player.Play()",
+    "if ($player.NaturalDuration.HasTimeSpan) {",
+    "  $ms = [Math]::Max(1, [int]$player.NaturalDuration.TimeSpan.TotalMilliseconds)",
+    "  Start-Sleep -Milliseconds ($ms + 120)",
+    "} else {",
+    "  Start-Sleep -Milliseconds 1500",
+    "}",
+    "$player.Close()"
+  ].join("; ");
+}
+
+function windowsSoundPlayerScript(): string {
+  return [
+    "$ErrorActionPreference = 'Stop'",
+    "$path = $args[0]",
+    "(New-Object Media.SoundPlayer $path).PlaySync()"
+  ].join("; ");
 }
 
 function run(cmd: string, args: string[]): Promise<void> {
