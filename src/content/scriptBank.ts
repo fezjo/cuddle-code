@@ -52,6 +52,8 @@ const DEFAULT_CANDIDATE_LINES_PATHS = [resolve(process.cwd(), "lines.md"), resol
 let scriptBank: Record<TriggerType, Record<Persona, string[]>> = fallbackScriptBank();
 let unknownHeadings: string[] = [];
 let parseFailure: string | undefined;
+const rotationState = new Map<string, { order: string[]; cursor: number; sourceKey: string }>();
+const lastPickedByRoute = new Map<string, string>();
 
 export function initializeScriptBank(output: { appendLine(message: string): void }, extensionRootPath?: string): void {
   const parsed = parseLinesFile(extensionRootPath);
@@ -64,6 +66,8 @@ export function initializeScriptBank(output: { appendLine(message: string): void
   scriptBank = parsed.bank;
   unknownHeadings = parsed.unknownHeadings;
   parseFailure = undefined;
+  rotationState.clear();
+  lastPickedByRoute.clear();
 
   output.appendLine(
     `[CUDDLE] Script bank loaded from lines.md: triggers=${Object.keys(scriptBank).length} unknownHeadings=${unknownHeadings.length}`
@@ -87,7 +91,32 @@ export function getScriptBankHealth(): {
 
 export function pickLine(trigger: TriggerType, persona: Persona): string {
   const choices = linesFor(trigger, persona);
-  return choices[Math.floor(Math.random() * choices.length)] ?? "Nice work.";
+  if (choices.length === 0) {
+    return "Nice work.";
+  }
+
+  const routeKey = `${trigger}|${persona}`;
+  const sourceKey = choices.join("\u0001");
+  const existing = rotationState.get(routeKey);
+  if (!existing || existing.sourceKey !== sourceKey || existing.cursor >= existing.order.length) {
+    const order = shuffle(choices);
+    const previous = lastPickedByRoute.get(routeKey);
+    if (order.length > 1 && previous && order[0] === previous) {
+      const first = order.shift();
+      if (first) {
+        order.push(first);
+      }
+    }
+    rotationState.set(routeKey, { order, cursor: 0, sourceKey });
+  }
+
+  const state = rotationState.get(routeKey);
+  const line = state?.order[state.cursor] ?? choices[0] ?? "Nice work.";
+  if (state) {
+    state.cursor += 1;
+  }
+  lastPickedByRoute.set(routeKey, line);
+  return line;
 }
 
 export function linesFor(trigger: TriggerType, persona: Persona): string[] {
@@ -269,4 +298,13 @@ function normalizeHeading(text: string): string {
 
 function unique(values: string[]): string[] {
   return [...new Set(values.map((x) => sanitizeLine(x)).filter(Boolean))];
+}
+
+function shuffle(values: string[]): string[] {
+  const out = [...values];
+  for (let i = out.length - 1; i > 0; i -= 1) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [out[i], out[j]] = [out[j], out[i]];
+  }
+  return out;
 }

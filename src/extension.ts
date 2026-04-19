@@ -27,6 +27,20 @@ export function activate(context: vscode.ExtensionContext): void {
   const decisionLogThrottle = new LogThrottle();
   const terminalOutput = new WeakMap<vscode.TerminalShellExecution, string>();
   let lastGitCommitTriggerAt = 0;
+  const SIM_DEFAULTS_KEY = "simulateDefaults";
+  let simulateDefaults = context.workspaceState.get<{
+    trigger?: TriggerType;
+    bypassForce?: boolean;
+    personaModeByTrigger?: Partial<Record<TriggerType, "route" | "female" | "male">>;
+    lineByRoute?: Record<string, string>;
+    sandySourceText?: string;
+  }>(SIM_DEFAULTS_KEY, {
+    trigger: undefined,
+    bypassForce: false,
+    personaModeByTrigger: {},
+    lineByRoute: {},
+    sandySourceText: "// sandy, keep me focused"
+  });
 
   const tracker = new TypingTracker({
     config,
@@ -191,17 +205,40 @@ export function activate(context: vscode.ExtensionContext): void {
 
   context.subscriptions.push(
     vscode.commands.registerCommand("cuddleCode.simulateTrigger", async () => {
-      const triggerChoices: Array<{ label: string; trigger: TriggerType; confidence: "high" | "medium" | "strict" }> = [
-        { label: "idleShort", trigger: "idleShort", confidence: "high" },
-        { label: "burstTyping", trigger: "burstTyping", confidence: "high" },
-        { label: "sustainedTyping", trigger: "sustainedTyping", confidence: "high" },
-        { label: "errorFixed", trigger: "errorFixed", confidence: "high" },
-        { label: "gitCommit", trigger: "gitCommit", confidence: "strict" },
-        { label: "testsPassing", trigger: "testsPassing", confidence: "strict" },
-        { label: "sandyMention", trigger: "sandyMention", confidence: "high" }
-      ];
+      const strictTriggers = new Set<TriggerType>(["gitCommit", "testsPassing"]);
+      const triggerSet = new Set<TriggerType>();
+      for (const line of allScriptLines()) {
+        triggerSet.add(line.trigger);
+      }
+      triggerSet.add("sandyMention");
 
-      const pick = await vscode.window.showQuickPick(triggerChoices, {
+      const triggerChoices: Array<{
+        label: string;
+        description: string;
+        trigger: TriggerType;
+        confidence: "high" | "medium" | "strict";
+      }> = [...triggerSet]
+        .sort((a, b) => a.localeCompare(b))
+        .map((trigger) => {
+          if (trigger === "sandyMention") {
+            return {
+              label: trigger,
+              description: "dynamic LLM line",
+              trigger,
+              confidence: "high" as const
+            };
+          }
+          const lineCount = linesFor(trigger, "female").length;
+          return {
+            label: trigger,
+            description: `${lineCount} scripted lines`,
+            trigger,
+            confidence: strictTriggers.has(trigger) ? ("strict" as const) : ("high" as const)
+          };
+        });
+      const orderedTriggerChoices = prioritizeChoice(triggerChoices, (x) => x.trigger === simulateDefaults.trigger);
+
+      const pick = await vscode.window.showQuickPick(orderedTriggerChoices, {
         placeHolder: "Select trigger to simulate",
         matchOnDescription: true
       });
@@ -209,11 +246,15 @@ export function activate(context: vscode.ExtensionContext): void {
         return;
       }
 
-      const bypassChoice = await vscode.window.showQuickPick(
+      const orderedBypassChoices = prioritizeChoice(
         [
           { label: "Respect scheduler", force: false },
           { label: "Force bypass scheduler", force: true }
         ],
+        (x) => x.force === Boolean(simulateDefaults.bypassForce)
+      );
+      const bypassChoice = await vscode.window.showQuickPick(
+        orderedBypassChoices,
         { placeHolder: "Simulation mode" }
       );
       if (!bypassChoice) {
@@ -221,9 +262,88 @@ export function activate(context: vscode.ExtensionContext): void {
       }
 
       const current = getConfig();
-      const persona = choosePersona(pick.trigger, current);
+      let persona: Persona = choosePersona(pick.trigger, current);
+      let selectedLine = "";
+      let sandySourceText = simulateDefaults.sandySourceText ?? "// sandy, keep me focused";
+      let selectedPersonaMode: "route" | "female" | "male" = "route";
+
+      if (pick.trigger !== "sandyMention") {
+        const rememberedPersonaMode = simulateDefaults.personaModeByTrigger?.[pick.trigger] ?? "route";
+        const orderedPersonaChoices = prioritizeChoice(
+          [
+            { label: `Route default (${persona})`, mode: "route" as const, persona },
+            { label: "female", mode: "female" as const, persona: "female" as const },
+            { label: "male", mode: "male" as const, persona: "male" as const }
+          ],
+          (x) => x.mode === rememberedPersonaMode
+        );
+        const personaChoice = await vscode.window.showQuickPick(
+          orderedPersonaChoices,
+          { placeHolder: "Select persona for simulation" }
+        );
+        if (!personaChoice) {
+          return;
+        }
+        persona = personaChoice.persona;
+        selectedPersonaMode = personaChoice.mode;
+
+        const candidateLines = linesFor(pick.trigger, persona);
+        const lineRouteKey = `${pick.trigger}|${persona}`;
+        const rememberedLine = simulateDefaults.lineByRoute?.[lineRouteKey] ?? "";
+        const lineChoices = [
+          { label: "Auto-rotate line", text: "", description: "Uses normal line rotation behavior" },
+          ...candidateLines.map((text, index) => ({
+            label: `${index + 1}. ${text}`,
+            text
+          }))
+        ];
+        const orderedLineChoices = prioritizeChoice(lineChoices, (x) => x.text === rememberedLine);
+        const lineChoice = await vscode.window.showQuickPick(
+          orderedLineChoices,
+          {
+            placeHolder: `Select voice line for ${pick.trigger}`,
+            matchOnDescription: true,
+            matchOnDetail: true
+          }
+        );
+        if (!lineChoice) {
+          return;
+        }
+        selectedLine = lineChoice.text;
+      } else {
+        const typedSandySource = await vscode.window.showInputBox({
+          title: "Simulate Sandy Mention",
+          prompt: "Enter arbitrary text to send to Sandy LLM request",
+          placeHolder: "// sandy, help me focus on this bug",
+          value: sandySourceText,
+          validateInput: (value) => (value.trim().length === 0 ? "Please enter some text for Sandy." : undefined)
+        });
+        if (!typedSandySource) {
+          return;
+        }
+        sandySourceText = typedSandySource;
+      }
+
+      const nextPersonaByTrigger = {
+        ...(simulateDefaults.personaModeByTrigger ?? {}),
+        [pick.trigger]: selectedPersonaMode
+      };
+      const lineRouteKey = `${pick.trigger}|${persona}`;
+      const nextLineByRoute = {
+        ...(simulateDefaults.lineByRoute ?? {}),
+        [lineRouteKey]: selectedLine
+      };
+      simulateDefaults = {
+        trigger: pick.trigger,
+        bypassForce: bypassChoice.force,
+        personaModeByTrigger: nextPersonaByTrigger,
+        lineByRoute: nextLineByRoute,
+        sandySourceText
+      };
+      await context.workspaceState.update(SIM_DEFAULTS_KEY, simulateDefaults);
+
       output.appendLine(
-        `[CUDDLE][SIMULATE] requested trigger=${pick.trigger} confidence=${pick.confidence} bypass=${bypassChoice.force} mode=${current.mode} persona=${persona}`
+        `[CUDDLE][SIMULATE] requested trigger=${pick.trigger} confidence=${pick.confidence} bypass=${bypassChoice.force} mode=${current.mode} persona=${persona} lineOverride=${selectedLine ? "yes" : "no"}`
       );
       output.show(true);
 
@@ -235,9 +355,12 @@ export function activate(context: vscode.ExtensionContext): void {
           forceBypassScheduler: bypassChoice.force,
           metadata:
             pick.trigger === "sandyMention"
-              ? { sourceText: "// sandy, keep me focused", languageId: "typescript" }
+              ? {
+                  sourceText: sandySourceText,
+                  languageId: vscode.window.activeTextEditor?.document.languageId ?? "plaintext"
+                }
               : undefined,
-          text: "",
+          text: selectedLine,
           persona
         },
         output
@@ -360,7 +483,7 @@ export function activate(context: vscode.ExtensionContext): void {
     }
 
     const persona: Persona = choosePersona(event.trigger, current);
-    let text = pickLine(event.trigger, persona);
+    let text = event.text.trim() ? event.text : pickLine(event.trigger, persona);
     if (event.trigger === "sandyMention") {
       text = await buildSandyResponse(
         current,
@@ -661,4 +784,12 @@ function isGitCommitFailureOutput(text: string): boolean {
     /\bpre-commit hook exited with code\b/.test(text) ||
     /\bfatal:\s+not a git repository\b/.test(text)
   );
+}
+
+function prioritizeChoice<T>(items: T[], predicate: (item: T) => boolean): T[] {
+  const idx = items.findIndex(predicate);
+  if (idx <= 0) {
+    return items;
+  }
+  return [items[idx], ...items.slice(0, idx), ...items.slice(idx + 1)];
 }

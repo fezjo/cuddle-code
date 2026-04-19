@@ -1,6 +1,7 @@
 {
   "name": "cuddle-code",
   "displayName": "Cuddle Code",
+  "icon": "sandy.png",
   "description": "VS Code extension that reacts to coding activity with supportive voice coaching using ElevenLabs.",
   "version": "0.0.1",
   "publisher": "local",
